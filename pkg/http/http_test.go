@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/stretchr/testify/require"
 
 	phttp "github.com/influx6/btclists/pkg/http"
@@ -27,8 +29,8 @@ var _ btclists.RateServer = (*RateServerMock)(nil)
 var someTime = time.Now()
 var someTimeLater = someTime.Add(time.Hour * 3600)
 var someRate = btclists.Rate{
+	Rate: decimal.NewFromFloat(43.322),
 	Time: someTime,
-	Rate: 43.322,
 	Coin: coin,
 	Fiat: fiat,
 }
@@ -112,7 +114,7 @@ func TestLatestHandlerSuccess(t *testing.T) {
 	var rateResponse phttp.RateResponse
 	var err = json.NewDecoder(response.Body).Decode(&rateResponse)
 	require.Nil(t, err)
-	require.Equal(t, someRate.Rate, rateResponse.Data)
+	require.Equal(t, someRate.Rate.String(), rateResponse.Data)
 }
 
 func TestAtHandlerSuccess(t *testing.T) {
@@ -148,7 +150,7 @@ func TestAtHandlerSuccess(t *testing.T) {
 	var rateResponse phttp.RateResponse
 	var err = json.NewDecoder(response.Body).Decode(&rateResponse)
 	require.Nil(t, err)
-	require.Equal(t, someRate.Rate, rateResponse.Data)
+	require.Equal(t, someRate.Rate.String(), rateResponse.Data)
 }
 
 func TestAtHandlerValidation(t *testing.T) {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -13,14 +15,17 @@ const (
 )
 
 var (
+	ErrInvalidToken = errors.New("invalid token")
+	ErrLimitReached = errors.New("limited reached")
+	ErrUnauthorized = errors.New("unauthorized request")
 	ErrRateNotFound = errors.New("unable to retrieve or find rate")
 )
 
 type Rate struct {
-	Time time.Time `json:"time"`
-	Rate float64   `json:"rate"`
-	Coin string    `json:"coin"`
-	Fiat string    `json:"fiat"`
+	Time time.Time       `json:"time"`
+	Rate decimal.Decimal `json:"rate"`
+	Coin string          `json:"coin"`
+	Fiat string          `json:"fiat"`
 }
 
 // Client is defined here as an interface for 2 specific reasons:

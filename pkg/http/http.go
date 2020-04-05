@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/influx6/btclists"
 )
 
@@ -16,7 +18,7 @@ var (
 )
 
 type RateResponse struct {
-	Data float64 `json:"rate"`
+	Data string `json:"rate"`
 }
 
 type RateError struct {
@@ -147,12 +149,13 @@ func GetAverageFor(server btclists.RateServer, fiat string, coin string) http.Ha
 			return
 		}
 
-		var sum float64
+		var sum decimal.Decimal
 		for _, rate := range results {
-			sum += rate.Rate
+			sum.Add(rate.Rate)
 		}
 
-		var averageRate = sum / float64(len(results))
+		var total = decimal.NewFromInt(int64(len(results)))
+		var averageRate = sum.Div(total)
 		respondWithRate(writer, averageRate)
 	}
 }
@@ -175,8 +178,8 @@ func validateAndRetrieveStartAndEndTimestamps(r *http.Request) (time.Time, time.
 	return from, to, nil
 }
 
-func respondWithRate(writer http.ResponseWriter, rate float64) {
-	if err := json.NewEncoder(writer).Encode(RateResponse{rate}); err != nil {
+func respondWithRate(writer http.ResponseWriter, rate decimal.Decimal) {
+	if err := json.NewEncoder(writer).Encode(RateResponse{Data: rate.String()}); err != nil {
 		log.Printf("[ALERT] JSON encoding just exploded, that is bad: %+s", err)
 	}
 }

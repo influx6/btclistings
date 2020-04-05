@@ -1,0 +1,6 @@
+FROM golang:alpine
+
+ADD . /app
+WORKDIR /app
+
+CMD ["go", "run", "cmd/btclistings/main.go"]
