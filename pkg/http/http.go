@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"time"
 
@@ -10,7 +11,8 @@ import (
 )
 
 var (
-	ErrNoTimestamp = errors.New("no timestamp provided, use t query")
+	ErrInvalidTimestamp = errors.New("timestamp is not valid")
+	ErrNoTimestamp      = errors.New("no timestamp provided, use t query")
 )
 
 type RateResponse struct {
@@ -25,7 +27,8 @@ type RateError struct {
 // specific fiat currency. We have no need for supporting multiple coins and fiats,
 // as this is to be a simple implementation.
 
-// GetLatest uses provided RateServer for specific fiat and coin.
+// GetLatest uses provided RateServer for specific fiat and coin to return last known
+// and available rate for giving pair from provided RateServer.
 //
 // Route: /{version}/{route} e.g /v1/latest
 // Response Format: application/json
@@ -34,12 +37,28 @@ type RateError struct {
 //
 func GetLatest(rates btclists.RateServer, fiat string, coin string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		panic("not implemented")
+		var latest, err = rates.Latest(request.Context(), coin, fiat)
+		if err != nil {
+			if err == btclists.ErrRateNotFound {
+				writer.WriteHeader(http.StatusNotFound)
+				respondWithError(writer, err)
+				return
+			}
+
+			writer.WriteHeader(http.StatusInternalServerError)
+			respondWithError(writer, err)
+			return
+		}
+
+		writer.WriteHeader(http.StatusOK)
+		respondWithRate(writer, latest.Rate)
 	}
 }
 
 // GetLatestAt uses provided RateServer returning price of specific fiat and crypto-coin
-// at provided timestamp. Timestamp is expected to be ISO 8601 format.
+// at provided timestamp.
+//
+// Timestamps are expected to be ISO 8601 format strings encoded properly (URL Encoded).
 //
 // Route: /{version}/{route}?t={timestamp} e.g /v1/latest_at?t={timestamp}
 // Response Format: application/json
@@ -48,26 +67,58 @@ func GetLatest(rates btclists.RateServer, fiat string, coin string) http.Handler
 //
 func GetLatestAt(rates btclists.RateServer, fiat string, coin string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		panic("not implemented")
+		var timestamp, err = validateAndRetrieveAtTimestamp(request)
+		if err != nil {
+			writer.WriteHeader(http.StatusBadRequest)
+			respondWithError(writer, err)
+			return
+		}
+
+		var result, rateErr = rates.At(request.Context(), coin, fiat, timestamp)
+		if rateErr != nil {
+			if rateErr == btclists.ErrRateNotFound {
+				writer.WriteHeader(http.StatusNotFound)
+				respondWithError(writer, err)
+				return
+			}
+
+			writer.WriteHeader(http.StatusInternalServerError)
+			respondWithError(writer, err)
+			return
+		}
+
+		writer.WriteHeader(http.StatusOK)
+		respondWithRate(writer, result.Rate)
 	}
 }
 
 // validateAndRetrieveAtTimestamp embodies validation logic necessary
 // to verify expected timestamp for giving request.
-//
-// We could move this into a middleware phase, but for now, I want
-// it here as it make sense to have it as part of the handler layer
-// for easier reading.
 func validateAndRetrieveAtTimestamp(r *http.Request) (time.Time, error) {
 	var t = r.URL.Query().Get("t")
+	return validateTimestampString(t)
+}
+
+func validateTimestampString(t string) (time.Time, error) {
 	if t == "" {
 		return time.Time{}, ErrNoTimestamp
 	}
-	return time.Parse("", t)
+
+	// is this a RFC3339 or ISO 8601 date timestamp?
+	if dateTime, err := time.Parse(btclists.DateTimeFormat, t); err == nil {
+		return dateTime, nil
+	}
+
+	// is this just a simple date format YYYY-MM-DD ?
+	if date, err := time.Parse(btclists.DateFormat, t); err == nil {
+		return date, nil
+	}
+
+	return time.Time{}, ErrInvalidTimestamp
 }
 
 // GetAverageFor uses provided RateServer returning price of for specific time range.
-// Timestamps are expected to be ISO 8601 format strings.
+// Timestamps are expected to be ISO 8601 format strings encoded properly (URL Encoded).
 //
 // Route: /{version}/{route}?from={timestamp}&to={timestamp} e.g /v1/average?from={timestamp}&to={timestamp}
 // Response Format: application/json
@@ -76,10 +127,62 @@ func validateAndRetrieveAtTimestamp(r *http.Request) (time.Time, error) {
 //
 func GetAverageFor(server btclists.RateServer, fiat string, coin string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
-		panic("not implemented")
+		var from, to, err = validateAndRetrieveStartAndEndTimestamps(request)
+		if err != nil {
+			writer.WriteHeader(http.StatusBadRequest)
+			respondWithError(writer, err)
+			return
+		}
+
+		var results, resErr = server.Range(request.Context(), coin, fiat, from, to)
+		if resErr != nil {
+			if resErr == btclists.ErrRateNotFound {
+				writer.WriteHeader(http.StatusNotFound)
+				respondWithError(writer, err)
+				return
+			}
+
+			writer.WriteHeader(http.StatusInternalServerError)
+			respondWithError(writer, err)
+			return
+		}
+
+		var sum float64
+		for _, rate := range results {
+			sum += rate.Rate
+		}
+
+		var averageRate = sum / float64(len(results))
+		respondWithRate(writer, averageRate)
 	}
 }
 
-func respondWithRate(writer http.ResponseWriter, rate float64) error {
-	return json.NewEncoder(writer).Encode(RateResponse{rate})
+// validateAndRetrieveStartAndEndTimestamp embodies validation logic necessary
+// to verify expected timestamps for giving request.
+func validateAndRetrieveStartAndEndTimestamps(r *http.Request) (time.Time, time.Time, error) {
+	var fromTs = r.URL.Query().Get("from")
+	var from, fromErr = validateTimestampString(fromTs)
+	if fromErr != nil {
+		return time.Time{}, time.Time{}, errors.New("from timestamp value is invalid")
+	}
+
+	var toTs = r.URL.Query().Get("to")
+	var to, toErr = validateTimestampString(toTs)
+	if toErr != nil {
+		return time.Time{}, time.Time{}, errors.New("to timestamp value is invalid")
+	}
+
+	return from, to, nil
+}
+
+func respondWithRate(writer http.ResponseWriter, rate float64) {
+	if err := json.NewEncoder(writer).Encode(RateResponse{rate}); err != nil {
+		log.Printf("[ALERT] JSON encoding just exploded, that is bad: %+s", err)
+	}
+}
+
+func respondWithError(writer http.ResponseWriter, err error) {
+	if err := json.NewEncoder(writer).Encode(RateError{Error: err.Error()}); err != nil {
+		log.Printf("[ALERT] JSON encoding just exploded, that is bad: %+s", err)
+	}
 }

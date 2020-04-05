@@ -1,11 +1,12 @@
 package http_test
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -21,7 +22,6 @@ const (
 	coin = "BTC"
 )
 
-var ErrRateNotFound = errors.New("rate not found")
 var _ btclists.RateServer = (*RateServerMock)(nil)
 
 var someTime = time.Now()
@@ -35,41 +35,41 @@ var someRate = btclists.Rate{
 
 // RateServerMock implements btclists.RateServer.
 type RateServerMock struct {
-	LatestFunc func(coin string, fiat string) (btclists.Rate, error)
-	AtFunc     func(coin string, fiat string, at time.Time) (btclists.Rate, error)
-	RangeFunc  func(coin string, fiat string, from, to time.Time) ([]btclists.Rate, error)
+	LatestFunc func(ctx context.Context, coin string, fiat string) (btclists.Rate, error)
+	AtFunc     func(ctx context.Context, coin string, fiat string, at time.Time) (btclists.Rate, error)
+	RangeFunc  func(ctx context.Context, coin string, fiat string, from, to time.Time) ([]btclists.Rate, error)
 }
 
 // Range implements btclists.RateServer interface.
 //
 // We test the functions using this implementation and not this
 // implementation.
-func (rs RateServerMock) Range(coin string, fiat string, from, to time.Time) ([]btclists.Rate, error) {
-	return rs.RangeFunc(coin, fiat, from, to)
+func (rs RateServerMock) Range(ctx context.Context, coin string, fiat string, from, to time.Time) ([]btclists.Rate, error) {
+	return rs.RangeFunc(ctx, coin, fiat, from, to)
 }
 
 // At implements btclists.RateServer interface.
 //
 // We test the functions using this implementation and not this
 // implementation.
-func (rs *RateServerMock) At(coin string, fiat string, ts time.Time) (btclists.Rate, error) {
-	return rs.AtFunc(coin, fiat, ts)
+func (rs *RateServerMock) At(ctx context.Context, coin string, fiat string, ts time.Time) (btclists.Rate, error) {
+	return rs.AtFunc(ctx, coin, fiat, ts)
 }
 
 // Latest implements btclists.RateServer interface.
 //
 // We test the functions using this implementation and not this
 // implementation.
-func (rs *RateServerMock) Latest(coin string, fiat string) (btclists.Rate, error) {
-	return rs.LatestFunc(coin, fiat)
+func (rs *RateServerMock) Latest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
+	return rs.LatestFunc(ctx, coin, fiat)
 }
 
 func TestLatestHandlerFailure(t *testing.T) {
 	var rates = new(RateServerMock)
-	rates.LatestFunc = func(cn string, ft string) (rate btclists.Rate, err error) {
+	rates.LatestFunc = func(ctx context.Context, cn string, ft string) (rate btclists.Rate, err error) {
 		require.Equal(t, coin, cn)
 		require.Equal(t, fiat, ft)
-		err = ErrRateNotFound
+		err = btclists.ErrRateNotFound
 		return
 	}
 
@@ -86,12 +86,12 @@ func TestLatestHandlerFailure(t *testing.T) {
 	var rateError phttp.RateError
 	var err = json.NewDecoder(response.Body).Decode(&rateError)
 	require.Nil(t, err)
-	require.Equal(t, ErrRateNotFound.Error(), rateError.Error)
+	require.Equal(t, btclists.ErrRateNotFound.Error(), rateError.Error)
 }
 
 func TestLatestHandlerSuccess(t *testing.T) {
 	var rates = new(RateServerMock)
-	rates.LatestFunc = func(cn string, ft string) (rate btclists.Rate, err error) {
+	rates.LatestFunc = func(ctx context.Context, cn string, ft string) (rate btclists.Rate, err error) {
 		require.Equal(t, coin, cn)
 		require.Equal(t, fiat, ft)
 
@@ -117,20 +117,26 @@ func TestLatestHandlerSuccess(t *testing.T) {
 
 func TestAtHandlerSuccess(t *testing.T) {
 	var rates = new(RateServerMock)
-	rates.AtFunc = func(cn string, ft string, when time.Time) (rate btclists.Rate, err error) {
+	rates.AtFunc = func(ctx context.Context, cn string, ft string, when time.Time) (rate btclists.Rate, err error) {
 		require.Equal(t, coin, cn)
 		require.Equal(t, fiat, ft)
-		require.Equal(t, when.Format(btclists.TimeFormat), someTime.Format(btclists.TimeFormat))
+		require.Equal(t, when.Format(btclists.DateTimeFormat), someTime.Format(btclists.DateTimeFormat))
 
 		rate = someRate
+		err = nil
 		return
 	}
-	var httpFunc = phttp.GetLatest(rates, fiat, coin)
+
+	var httpFunc = phttp.GetLatestAt(rates, fiat, coin)
 
 	var response = httptest.NewRecorder()
+
+	var values = url.Values{}
+	values.Add("t", someTime.Format(btclists.DateTimeFormat))
+
 	var request = httptest.NewRequest(
 		"GET",
-		fmt.Sprintf("/at?t=%s", someTime.Format(btclists.TimeFormat)),
+		fmt.Sprintf("/at?%s", values.Encode()),
 		nil,
 	)
 
@@ -147,19 +153,18 @@ func TestAtHandlerSuccess(t *testing.T) {
 
 func TestAtHandlerValidation(t *testing.T) {
 	var rates = new(RateServerMock)
-	rates.AtFunc = func(cn string, ft string, when time.Time) (rate btclists.Rate, err error) {
+	rates.AtFunc = func(ctx context.Context, cn string, ft string, when time.Time) (rate btclists.Rate, err error) {
 		rate = someRate
 		return
 	}
-	var httpFunc = phttp.GetLatest(rates, fiat, coin)
-	var response = httptest.NewRecorder()
+	var httpFunc = phttp.GetLatestAt(rates, fiat, coin)
 
 	var table = []struct {
 		t      string
 		status int
 	}{
 		{
-			t:      time.Now().Format(btclists.TimeFormat),
+			t:      time.Now().Format(btclists.DateTimeFormat),
 			status: http.StatusOK,
 		},
 		{
@@ -184,7 +189,7 @@ func TestAtHandlerValidation(t *testing.T) {
 		},
 		{
 			t:      time.Now().Format(time.RFC3339Nano),
-			status: http.StatusBadRequest,
+			status: http.StatusOK,
 		},
 		{
 			t:      time.Now().Format(time.RFC822Z),
@@ -200,27 +205,30 @@ func TestAtHandlerValidation(t *testing.T) {
 		},
 	}
 
-	for _, test := range table {
-		response.Body.Reset()
+	var values = url.Values{}
+
+	for index, test := range table {
+		values.Set("t", test.t)
+
+		var response = httptest.NewRecorder()
 		var request = httptest.NewRequest(
 			"GET",
-			fmt.Sprintf("/at?t=%s", test.t),
+			fmt.Sprintf("/at?%s", values.Encode()),
 			nil,
 		)
 
 		httpFunc(response, request)
-		require.Equal(t, test.status, response.Code)
+		require.Equal(t, test.status, response.Code, "Failed at %d", index)
 	}
 }
 
 func TestAverageHandlerValidation(t *testing.T) {
 	var rates = new(RateServerMock)
-	rates.RangeFunc = func(cn string, ft string, from time.Time, to time.Time) (rates []btclists.Rate, err error) {
-		return
+	rates.RangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (rates []btclists.Rate, err error) {
+		return []btclists.Rate{someRate}, nil
 	}
 
-	var httpFunc = phttp.GetLatest(rates, fiat, coin)
-	var response = httptest.NewRecorder()
+	var httpFunc = phttp.GetAverageFor(rates, fiat, coin)
 
 	var now = time.Now()
 	var table = []struct {
@@ -230,17 +238,17 @@ func TestAverageHandlerValidation(t *testing.T) {
 	}{
 		{
 			status: http.StatusOK,
-			from:   now.Format(btclists.TimeFormat),
-			to:     now.Add(time.Minute * 1).Format(btclists.TimeFormat),
+			from:   now.Format(btclists.DateTimeFormat),
+			to:     now.Add(time.Minute * 1).Format(btclists.DateTimeFormat),
 		},
 		{
 			status: http.StatusOK,
-			from:   now.Format(btclists.TimeFormat),
-			to:     now.Format(btclists.TimeFormat),
+			from:   now.Format(btclists.DateTimeFormat),
+			to:     now.Format(btclists.DateTimeFormat),
 		},
 		{
 			status: http.StatusBadRequest,
-			from:   now.Format(btclists.TimeFormat),
+			from:   now.Format(btclists.DateTimeFormat),
 			to:     now.Add(time.Minute * 1).Format(time.ANSIC),
 		},
 		{
@@ -250,20 +258,25 @@ func TestAverageHandlerValidation(t *testing.T) {
 		},
 		{
 			status: http.StatusBadRequest,
-			from:   now.Format(btclists.TimeFormat),
+			from:   now.Format(btclists.DateTimeFormat),
 			to:     now.Add(time.Minute * 1).Format(time.ANSIC),
 		},
 	}
 
-	for _, test := range table {
-		response.Body.Reset()
+	var values = url.Values{}
+	for index, test := range table {
+		values.Set("to", test.to)
+		values.Set("from", test.from)
+
+		var response = httptest.NewRecorder()
 		var request = httptest.NewRequest(
 			"GET",
-			fmt.Sprintf("/range?from=%s&to=%s", test.from, test.to),
+			fmt.Sprintf("/range?%s", values.Encode()),
 			nil,
 		)
 
 		httpFunc(response, request)
-		require.Equal(t, test.status, response.Code)
+
+		require.Equal(t, test.status, response.Code, "Failed for test %d", index)
 	}
 }
