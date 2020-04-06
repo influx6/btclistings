@@ -12,70 +12,54 @@ import (
 
 	"github.com/influx6/btclists/pkg"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/influx6/btclists"
 )
 
-const (
-	fiat = "USD"
-	coin = "BTC"
-)
-
-var _ btclists.RateServer = (*RateServerMock)(nil)
-
-var someTime = time.Now()
-var someTimeLater = someTime.Add(time.Hour * 3600)
-var someRate = btclists.Rate{
-	Rate: decimal.NewFromFloat(43.322),
-	Time: someTime,
-	Coin: coin,
-	Fiat: fiat,
-}
+var _ btclists.RateService = (*RateServerMock)(nil)
 
 // RateServerMock implements btclists.RateServer.
 type RateServerMock struct {
-	LatestFunc func(ctx context.Context, coin string, fiat string) (btclists.Rate, error)
-	AtFunc     func(ctx context.Context, coin string, fiat string, at time.Time) (btclists.Rate, error)
-	RangeFunc  func(ctx context.Context, coin string, fiat string, from, to time.Time) ([]btclists.Rate, error)
+	LatestFunc func(ctx context.Context, COIN string, FIAT string) (btclists.Rate, error)
+	AtFunc     func(ctx context.Context, COIN string, FIAT string, at time.Time) (btclists.Rate, error)
+	RangeFunc  func(ctx context.Context, COIN string, FIAT string, from, to time.Time) ([]btclists.Rate, error)
 }
 
 // Range implements btclists.RateServer interface.
 //
 // We test the functions using this implementation and not this
 // implementation.
-func (rs RateServerMock) Range(ctx context.Context, coin string, fiat string, from, to time.Time) ([]btclists.Rate, error) {
-	return rs.RangeFunc(ctx, coin, fiat, from, to)
+func (rs RateServerMock) Range(ctx context.Context, COIN string, FIAT string, from, to time.Time) ([]btclists.Rate, error) {
+	return rs.RangeFunc(ctx, COIN, FIAT, from, to)
 }
 
 // At implements btclists.RateServer interface.
 //
 // We test the functions using this implementation and not this
 // implementation.
-func (rs *RateServerMock) At(ctx context.Context, coin string, fiat string, ts time.Time) (btclists.Rate, error) {
-	return rs.AtFunc(ctx, coin, fiat, ts)
+func (rs *RateServerMock) At(ctx context.Context, COIN string, FIAT string, ts time.Time) (btclists.Rate, error) {
+	return rs.AtFunc(ctx, COIN, FIAT, ts)
 }
 
 // Latest implements btclists.RateServer interface.
 //
 // We test the functions using this implementation and not this
 // implementation.
-func (rs *RateServerMock) Latest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
-	return rs.LatestFunc(ctx, coin, fiat)
+func (rs *RateServerMock) Latest(ctx context.Context, COIN string, FIAT string) (btclists.Rate, error) {
+	return rs.LatestFunc(ctx, COIN, FIAT)
 }
 
 func TestLatestHandlerFailure(t *testing.T) {
 	var rates = new(RateServerMock)
 	rates.LatestFunc = func(ctx context.Context, cn string, ft string) (rate btclists.Rate, err error) {
-		require.Equal(t, coin, cn)
-		require.Equal(t, fiat, ft)
+		require.Equal(t, COIN, cn)
+		require.Equal(t, FIAT, ft)
 		err = btclists.ErrRateNotFound
 		return
 	}
 
-	var httpFunc = pkg.GetLatest(rates, fiat, coin)
+	var httpFunc = pkg.GetLatest(rates, FIAT, COIN)
 
 	var response = httptest.NewRecorder()
 	var request = httptest.NewRequest("GET", "/latest", nil)
@@ -94,14 +78,14 @@ func TestLatestHandlerFailure(t *testing.T) {
 func TestLatestHandlerSuccess(t *testing.T) {
 	var rates = new(RateServerMock)
 	rates.LatestFunc = func(ctx context.Context, cn string, ft string) (rate btclists.Rate, err error) {
-		require.Equal(t, coin, cn)
-		require.Equal(t, fiat, ft)
+		require.Equal(t, COIN, cn)
+		require.Equal(t, FIAT, ft)
 
 		rate = someRate
 		return
 	}
 
-	var httpFunc = pkg.GetLatest(rates, fiat, coin)
+	var httpFunc = pkg.GetLatest(rates, FIAT, COIN)
 
 	var response = httptest.NewRecorder()
 	var request = httptest.NewRequest("GET", "/latest", nil)
@@ -120,8 +104,8 @@ func TestLatestHandlerSuccess(t *testing.T) {
 func TestAtHandlerSuccess(t *testing.T) {
 	var rates = new(RateServerMock)
 	rates.AtFunc = func(ctx context.Context, cn string, ft string, when time.Time) (rate btclists.Rate, err error) {
-		require.Equal(t, coin, cn)
-		require.Equal(t, fiat, ft)
+		require.Equal(t, COIN, cn)
+		require.Equal(t, FIAT, ft)
 		require.Equal(t, when.Format(btclists.DateTimeFormat), someTime.Format(btclists.DateTimeFormat))
 
 		rate = someRate
@@ -129,7 +113,7 @@ func TestAtHandlerSuccess(t *testing.T) {
 		return
 	}
 
-	var httpFunc = pkg.GetLatestAt(rates, fiat, coin)
+	var httpFunc = pkg.GetLatestAt(rates, FIAT, COIN)
 
 	var response = httptest.NewRecorder()
 
@@ -159,7 +143,7 @@ func TestAtHandlerValidation(t *testing.T) {
 		rate = someRate
 		return
 	}
-	var httpFunc = pkg.GetLatestAt(rates, fiat, coin)
+	var httpFunc = pkg.GetLatestAt(rates, FIAT, COIN)
 
 	var table = []struct {
 		t      string
@@ -230,7 +214,7 @@ func TestAverageHandlerValidation(t *testing.T) {
 		return []btclists.Rate{someRate}, nil
 	}
 
-	var httpFunc = pkg.GetAverageFor(rates, fiat, coin)
+	var httpFunc = pkg.GetAverageFor(rates, FIAT, COIN)
 
 	var now = time.Now()
 	var table = []struct {
