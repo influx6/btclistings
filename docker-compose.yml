@@ -18,17 +18,3 @@ services:
       POSTGRES_DB: btc_listings
       PGDATA: /var/lib/postgresql/data
 
-#  api:
-#    container_name: btc_listings_dev
-#    build:
-#      context: .
-#      dockerfile: Dockerfile.dev
-#    command: go run cmd/btclistings/main.go
-#    volumes:
-#      - ./src:/go/src/app
-#    working_dir: /go/src/app
-#    ports:
-#      - "3001:3001"
-#    environment:
-#      PORT: 3001
-#      HOST: 127.0.0.1
