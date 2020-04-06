@@ -66,9 +66,13 @@ type CandleSticks struct {
 // For example, CoinAPI provides endpoints for retrieving on a per minute, hour or more
 // base for candle-sticks data values on the rate changes for a giving coin.
 type CoinAPI struct {
-	URL      string
-	APIToken string
-	Client   btclists.Client
+	URL    string
+	Token  string
+	Client btclists.Client
+}
+
+func NewCoinAPI(url string, token string, client btclists.Client) *CoinAPI {
+	return &CoinAPI{URL: url, Token: token, Client: client}
 }
 
 // Rate retrieves rate for giving coin based on fiat currency for specific
@@ -83,7 +87,7 @@ func (c *CoinAPI) Rate(ctx context.Context, coin string, fiat string, time time.
 		query.Set("time", time.Format(btclists.DateTimeFormat))
 	}
 
-	var req, err = buildRequest(ctx, c.APIToken, "GET", path, query, nil)
+	var req, err = buildRequest(ctx, c.Token, "GET", path, query, nil)
 	if err != nil {
 		return rate, err
 	}
@@ -127,20 +131,20 @@ func (c *CoinAPI) Rate(ctx context.Context, coin string, fiat string, time time.
 }
 
 // RangeFrom returns all results from giving time till provided limit.
-func (c *CoinAPI) RangeFrom(ctx context.Context, coin string, fiat string, from time.Time, limit int) ([]btclists.Rate, error) {
-	return c.Range(ctx, coin, fiat, from, time.Time{}, limit)
+func (c *CoinAPI) RangeFrom(ctx context.Context, coin string, fiat string, from time.Time, period string, limit int) ([]btclists.Rate, error) {
+	return c.Range(ctx, coin, fiat, from, time.Time{}, period, limit)
 }
 
 // Range retrieves all rates for giving coin for giving fiat and crypto-coin pair from provided
 // time range (if to is not provided, then till limit requested). Note CoinAPI has a 100,000 record
 // limit.
-func (c *CoinAPI) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time, limit int) ([]btclists.Rate, error) {
+func (c *CoinAPI) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time, period string, limit int) ([]btclists.Rate, error) {
 	if from.IsZero() {
 		return nil, errors.New("invalid 'from' time range provided")
 	}
 
 	var query = url.Values{}
-	query.Set("period_id", PeriodInterval)
+	query.Set("period_id", period)
 	query.Set("include_empty_items", "false")
 	query.Set("limit", fmt.Sprintf("%d", limit))
 	query.Set("time_start", from.Format(btclists.DateTimeFormat))
@@ -150,7 +154,7 @@ func (c *CoinAPI) Range(ctx context.Context, coin string, fiat string, from time
 	}
 
 	var path = fmt.Sprintf("%s/v1/ohlcv/%s/%s/history", c.URL, coin, fiat)
-	var req, err = buildRequest(ctx, c.APIToken, "GET", path, query, nil)
+	var req, err = buildRequest(ctx, c.Token, "GET", path, query, nil)
 	if err != nil {
 		return nil, err
 	}

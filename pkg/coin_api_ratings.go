@@ -24,7 +24,6 @@ type CoinAPIRatingService struct {
 	ctx      context.Context
 	workers  sync.WaitGroup
 	exchange *CoinAPI
-	doFn     chan func()
 }
 
 func NewCoinAPIRatingService(ctx context.Context, db btclists.RateDB, exchange *CoinAPI, coin string, fiat string) *CoinAPIRatingService {
@@ -36,7 +35,6 @@ func NewCoinAPIRatingService(ctx context.Context, db btclists.RateDB, exchange *
 		tdb:      db,
 		workers:  waiter,
 		exchange: exchange,
-		doFn:     make(chan func(), 0),
 	}
 
 	// spawn single worker for latest
@@ -97,7 +95,7 @@ func (t *CoinAPIRatingService) At(ctx context.Context, coin string, fiat string,
 	}
 
 	// Save new rating data to db.
-	if dbErr := t.tdb.Add(ratingFromAPI); dbErr != nil {
+	if dbErr := t.tdb.Add(ctx, ratingFromAPI); dbErr != nil {
 		log.Printf("[CRITICAL] | Failed to save rating to db | %s\n", dbErr)
 
 		// Returning rating with DBError error.
@@ -152,13 +150,13 @@ func (t *CoinAPIRatingService) Range(ctx context.Context, coin string, fiat stri
 	// and serve that as results after saving batch.
 	if from.Before(oldest.Time) {
 		var apiErr error
-		results, apiErr = t.exchange.Range(ctx, coin, fiat, from, to, MaxLimit)
+		results, apiErr = t.exchange.Range(ctx, coin, fiat, from, to, PeriodInterval, MaxLimit)
 		if apiErr != nil {
 			log.Printf("[ERROR] | API fails us | %s\n", apiErr)
 			return results, apiErr
 		}
 
-		if dbSaveErr := t.tdb.AddBatch(results); dbSaveErr != nil {
+		if dbSaveErr := t.tdb.AddBatch(ctx, results); dbSaveErr != nil {
 			log.Printf("[CRITICAL] | DB failures are not good | %s\n", dbSaveErr)
 			return results, dbSaveErr
 		}
@@ -186,7 +184,7 @@ func (t *CoinAPIRatingService) getAndUpdateWithLatest(ctx context.Context) (btcl
 	}
 
 	// send latest ratings into db.
-	if dbErr := t.tdb.Add(latestRating); dbErr != nil {
+	if dbErr := t.tdb.Add(ctx, latestRating); dbErr != nil {
 		log.Printf("[CRITICAL] | Bad News, Failed to update db | %s\n", dbErr)
 		err = ErrDBError
 	}

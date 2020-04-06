@@ -5,8 +5,9 @@ services:
     container_name: timescale
     image: timescale/timescaledb:latest-pg11
     volumes:
-      - "./data/db:/var/lib/postgresql/data"
       - "./data/conn:/var/run/postgresql"
+      - "./data/db:/var/lib/postgresql/data"
+      - "./migrations:/docker-entrypoint-initdb.d"
     ports:
       - 5432:5432
     expose:
@@ -14,20 +15,20 @@ services:
     environment:
       POSTGRES_PASSWORD: starcraft
       POSTGRES_USER: starcraft
-      POSTGRES_DB: denos
+      POSTGRES_DB: btc_listings
       PGDATA: /var/lib/postgresql/data
 
-  api:
-    container_name: btc_listings_dev
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    command: go run main.go
-    volumes:
-      - ./src:/go/src/app
-    working_dir: /go/src/app
-    ports:
-      - "3001:3001"
-    environment:
-      PORT: 3001
-      HOST: 127.0.0.1
+#  api:
+#    container_name: btc_listings_dev
+#    build:
+#      context: .
+#      dockerfile: Dockerfile.dev
+#    command: go run cmd/btclistings/main.go
+#    volumes:
+#      - ./src:/go/src/app
+#    working_dir: /go/src/app
+#    ports:
+#      - "3001:3001"
+#    environment:
+#      PORT: 3001
+#      HOST: 127.0.0.1

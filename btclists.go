@@ -65,7 +65,7 @@ type RateService interface {
 type RateDB interface {
 	RateService
 
-	Add(rate Rate) error
-	AddBatch(rate []Rate) error
+	Add(ctx context.Context, rate Rate) error
+	AddBatch(ctx context.Context, rate []Rate) error
 	Oldest(ctx context.Context, coin string, fiat string) (Rate, error)
 }

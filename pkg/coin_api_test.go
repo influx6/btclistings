@@ -35,9 +35,9 @@ func (m *MockClient) Do(req *http.Request) (*http.Response, error) {
 func TestCoinAPI_Range_ValidateURLWithoutToTime(t *testing.T) {
 	var httpClient MockClient
 	var coinLayer = pkg.CoinAPI{
-		URL:      APIURI,
-		APIToken: APIToken,
-		Client:   &httpClient,
+		URL:    APIURI,
+		Token:  APIToken,
+		Client: &httpClient,
 	}
 
 	var formattedTime = url.QueryEscape(someTimeFormatted)
@@ -53,9 +53,9 @@ func TestCoinAPI_Range_ValidateURLWithoutToTime(t *testing.T) {
 func TestCoinAPI_Range_ValidateURLWithToTime(t *testing.T) {
 	var httpClient MockClient
 	var coinLayer = pkg.CoinAPI{
-		URL:      APIURI,
-		APIToken: APIToken,
-		Client:   &httpClient,
+		URL:    APIURI,
+		Token:  APIToken,
+		Client: &httpClient,
 	}
 
 	var formattedTime = url.QueryEscape(someTimeFormatted)
@@ -81,9 +81,9 @@ func TestCoinAPI_Range_ValidateURLWithToTime(t *testing.T) {
 func TestCoinAPI_Rate_ValidateURLWithoutTime(t *testing.T) {
 	var httpClient MockClient
 	var coinLayer = pkg.CoinAPI{
-		URL:      APIURI,
-		APIToken: APIToken,
-		Client:   &httpClient,
+		URL:    APIURI,
+		Token:  APIToken,
+		Client: &httpClient,
 	}
 
 	var expectedURL = fmt.Sprintf("%s/v1/exchangerate/%s/%s?", APIURI, COIN, FIAT)
@@ -92,15 +92,15 @@ func TestCoinAPI_Rate_ValidateURLWithoutTime(t *testing.T) {
 		return nil, errors.New("not concerned")
 	}
 
-	coinLayer.Rate(context.Background(), COIN, FIAT, time.Time{})
+	_, _ = coinLayer.Rate(context.Background(), COIN, FIAT, time.Time{})
 }
 
 func TestCoinAPI_Rate_ValidateURLWithTime(t *testing.T) {
 	var httpClient MockClient
 	var coinLayer = pkg.CoinAPI{
-		URL:      APIURI,
-		APIToken: APIToken,
-		Client:   &httpClient,
+		URL:    APIURI,
+		Token:  APIToken,
+		Client: &httpClient,
 	}
 
 	var formattedTime = url.QueryEscape(someTimeFormatted)
@@ -110,5 +110,5 @@ func TestCoinAPI_Rate_ValidateURLWithTime(t *testing.T) {
 		return nil, errors.New("not concerned")
 	}
 
-	coinLayer.Rate(context.Background(), COIN, FIAT, someTime)
+	_, _ = coinLayer.Rate(context.Background(), COIN, FIAT, someTime)
 }
