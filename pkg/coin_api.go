@@ -1,4 +1,4 @@
-package exchanges
+package pkg
 
 import (
 	"context"
@@ -66,19 +66,15 @@ type CandleSticks struct {
 // For example, CoinAPI provides endpoints for retrieving on a per minute, hour or more
 // base for candle-sticks data values on the rate changes for a giving coin.
 type CoinAPI struct {
-	URL          string
-	APIToken     string
-	limitReached bool
-	Client       btclists.Client
+	URL      string
+	APIToken string
+	Client   btclists.Client
 }
 
 // Rate retrieves rate for giving coin based on fiat currency for specific
 // time.
 func (c *CoinAPI) Rate(ctx context.Context, coin string, fiat string, time time.Time) (btclists.Rate, error) {
 	var rate btclists.Rate
-	if c.limitReached {
-		return rate, btclists.ErrLimitReached
-	}
 
 	var path = fmt.Sprintf("%s/v1/exchangerate/%s/%s", c.URL, coin, fiat)
 
@@ -103,7 +99,6 @@ func (c *CoinAPI) Rate(ctx context.Context, coin string, fiat string, time time.
 	case http.StatusBadRequest:
 		return rate, ErrBadRequest
 	case 429:
-		c.limitReached = true
 		return rate, btclists.ErrLimitReached
 	case http.StatusUnauthorized:
 		return rate, btclists.ErrInvalidToken
@@ -140,15 +135,12 @@ func (c *CoinAPI) RangeFrom(ctx context.Context, coin string, fiat string, from 
 // time range (if to is not provided, then till limit requested). Note CoinAPI has a 100,000 record
 // limit.
 func (c *CoinAPI) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time, limit int) ([]btclists.Rate, error) {
-	if c.limitReached {
-		return nil, btclists.ErrLimitReached
-	}
-
 	if from.IsZero() {
 		return nil, errors.New("invalid 'from' time range provided")
 	}
 
 	var query = url.Values{}
+	query.Set("period_id", PeriodInterval)
 	query.Set("include_empty_items", "false")
 	query.Set("limit", fmt.Sprintf("%d", limit))
 	query.Set("time_start", from.Format(btclists.DateTimeFormat))
@@ -174,7 +166,6 @@ func (c *CoinAPI) Range(ctx context.Context, coin string, fiat string, from time
 	case http.StatusBadRequest:
 		return nil, errors.New("bad request")
 	case 429:
-		c.limitReached = true
 		return nil, btclists.ErrLimitReached
 	case http.StatusUnauthorized:
 		return nil, btclists.ErrInvalidToken

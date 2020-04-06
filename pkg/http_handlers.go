@@ -1,4 +1,4 @@
-package http
+package pkg
 
 import (
 	"encoding/json"
@@ -29,15 +29,15 @@ type RateError struct {
 // specific fiat currency. We have no need for supporting multiple coins and fiats,
 // as this is to be a simple implementation.
 
-// GetLatest uses provided RateServer for specific fiat and coin to return last known
-// and available rate for giving pair from provided RateServer.
+// GetLatest uses provided RateService for specific fiat and coin to return last known
+// and available rate for giving pair from provided RateService.
 //
 // Route: /{version}/{route} e.g /v1/latest
 // Response Format: application/json
 // Response: { data: {price} } where 'price' is a float64 type.
 // Error: { error: {error text} } with status code in range 400-500.
 //
-func GetLatest(rates btclists.RateServer, fiat string, coin string) http.HandlerFunc {
+func GetLatest(rates btclists.RateService, fiat string, coin string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var latest, err = rates.Latest(request.Context(), coin, fiat)
 		if err != nil {
@@ -57,7 +57,7 @@ func GetLatest(rates btclists.RateServer, fiat string, coin string) http.Handler
 	}
 }
 
-// GetLatestAt uses provided RateServer returning price of specific fiat and crypto-coin
+// GetLatestAt uses provided RateService returning price of specific fiat and crypto-coin
 // at provided timestamp.
 //
 // Timestamps are expected to be ISO 8601 format strings encoded properly (URL Encoded).
@@ -67,7 +67,7 @@ func GetLatest(rates btclists.RateServer, fiat string, coin string) http.Handler
 // Response: { data: {price} } where 'price' is a float64 type.
 // Error Response: { error: {error text} } with status code in range 400-500.
 //
-func GetLatestAt(rates btclists.RateServer, fiat string, coin string) http.HandlerFunc {
+func GetLatestAt(rates btclists.RateService, fiat string, coin string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var timestamp, err = validateAndRetrieveAtTimestamp(request)
 		if err != nil {
@@ -119,7 +119,7 @@ func validateTimestampString(t string) (time.Time, error) {
 	return time.Time{}, ErrInvalidTimestamp
 }
 
-// GetAverageFor uses provided RateServer returning price of for specific time range.
+// GetAverageFor uses provided RateService returning price of for specific time range.
 // Timestamps are expected to be ISO 8601 format strings encoded properly (URL Encoded).
 //
 // Route: /{version}/{route}?from={timestamp}&to={timestamp} e.g /v1/average?from={timestamp}&to={timestamp}
@@ -127,7 +127,7 @@ func validateTimestampString(t string) (time.Time, error) {
 // Response: { data: {price} } where 'price' is a float64 type.
 // Error Response: { error: {error text} } with status code in range 400-500.
 //
-func GetAverageFor(server btclists.RateServer, fiat string, coin string) http.HandlerFunc {
+func GetAverageFor(server btclists.RateService, fiat string, coin string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var from, to, err = validateAndRetrieveStartAndEndTimestamps(request)
 		if err != nil {

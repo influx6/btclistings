@@ -1,4 +1,4 @@
-package exchanges_test
+package pkg_test
 
 import (
 	"bytes"
@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/influx6/btclists/pkg"
+
 	"github.com/influx6/btclists"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/influx6/btclists/pkg/exchanges"
 )
 
 /*
@@ -59,14 +59,14 @@ func (m *MockClient) Do(req *http.Request) (*http.Response, error) {
 
 func TestCoinAPI_Range_ValidateURLWithoutToTime(t *testing.T) {
 	var httpClient MockClient
-	var coinLayer = exchanges.CoinAPI{
+	var coinLayer = pkg.CoinAPI{
 		URL:      APIURI,
 		APIToken: APIToken,
 		Client:   &httpClient,
 	}
 
 	var formattedTime = url.QueryEscape(someTimeFormatted)
-	var expectedURL = fmt.Sprintf("%s/v1/ohlcv/%s/%s/history?include_empty_items=false&limit=1&time_start=%s", APIURI, Coin, Fiat, formattedTime)
+	var expectedURL = fmt.Sprintf("%s/v1/ohlcv/%s/%s/history?include_empty_items=false&limit=1&period_id=%s&time_start=%s", APIURI, Coin, Fiat, pkg.PeriodInterval, formattedTime)
 	httpClient.DoFunc = func(req *http.Request) (response *http.Response, err error) {
 		require.Equal(t, expectedURL, req.URL.String())
 		return nil, errors.New("not concerned")
@@ -77,7 +77,7 @@ func TestCoinAPI_Range_ValidateURLWithoutToTime(t *testing.T) {
 
 func TestCoinAPI_Range_ValidateURLWithToTime(t *testing.T) {
 	var httpClient MockClient
-	var coinLayer = exchanges.CoinAPI{
+	var coinLayer = pkg.CoinAPI{
 		URL:      APIURI,
 		APIToken: APIToken,
 		Client:   &httpClient,
@@ -86,10 +86,11 @@ func TestCoinAPI_Range_ValidateURLWithToTime(t *testing.T) {
 	var formattedTime = url.QueryEscape(someTimeFormatted)
 	var formattedOtherTime = url.QueryEscape(someOtherTimeFormatted)
 	var expectedURL = fmt.Sprintf(
-		"%s/v1/ohlcv/%s/%s/history?include_empty_items=false&limit=1&time_end=%s&time_start=%s",
+		"%s/v1/ohlcv/%s/%s/history?include_empty_items=false&limit=1&period_id=%s&time_end=%s&time_start=%s",
 		APIURI,
 		Coin,
 		Fiat,
+		pkg.PeriodInterval,
 		formattedOtherTime,
 		formattedTime,
 	)
@@ -104,7 +105,7 @@ func TestCoinAPI_Range_ValidateURLWithToTime(t *testing.T) {
 
 func TestCoinAPI_Rate_ValidateURLWithoutTime(t *testing.T) {
 	var httpClient MockClient
-	var coinLayer = exchanges.CoinAPI{
+	var coinLayer = pkg.CoinAPI{
 		URL:      APIURI,
 		APIToken: APIToken,
 		Client:   &httpClient,
@@ -121,7 +122,7 @@ func TestCoinAPI_Rate_ValidateURLWithoutTime(t *testing.T) {
 
 func TestCoinAPI_Rate_ValidateURLWithTime(t *testing.T) {
 	var httpClient MockClient
-	var coinLayer = exchanges.CoinAPI{
+	var coinLayer = pkg.CoinAPI{
 		URL:      APIURI,
 		APIToken: APIToken,
 		Client:   &httpClient,

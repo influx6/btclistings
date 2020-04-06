@@ -1,4 +1,4 @@
-package http_test
+package pkg_test
 
 import (
 	"context"
@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/influx6/btclists/pkg"
+
 	"github.com/shopspring/decimal"
 
 	"github.com/stretchr/testify/require"
-
-	phttp "github.com/influx6/btclists/pkg/http"
 
 	"github.com/influx6/btclists"
 )
@@ -75,7 +75,7 @@ func TestLatestHandlerFailure(t *testing.T) {
 		return
 	}
 
-	var httpFunc = phttp.GetLatest(rates, fiat, coin)
+	var httpFunc = pkg.GetLatest(rates, fiat, coin)
 
 	var response = httptest.NewRecorder()
 	var request = httptest.NewRequest("GET", "/latest", nil)
@@ -85,7 +85,7 @@ func TestLatestHandlerFailure(t *testing.T) {
 	require.NotEqual(t, 0, response.Body.Len())
 	require.Equal(t, http.StatusNotFound, response.Code)
 
-	var rateError phttp.RateError
+	var rateError pkg.RateError
 	var err = json.NewDecoder(response.Body).Decode(&rateError)
 	require.Nil(t, err)
 	require.Equal(t, btclists.ErrRateNotFound.Error(), rateError.Error)
@@ -101,7 +101,7 @@ func TestLatestHandlerSuccess(t *testing.T) {
 		return
 	}
 
-	var httpFunc = phttp.GetLatest(rates, fiat, coin)
+	var httpFunc = pkg.GetLatest(rates, fiat, coin)
 
 	var response = httptest.NewRecorder()
 	var request = httptest.NewRequest("GET", "/latest", nil)
@@ -111,7 +111,7 @@ func TestLatestHandlerSuccess(t *testing.T) {
 	require.NotEqual(t, 0, response.Body.Len())
 	require.Equal(t, http.StatusOK, response.Code)
 
-	var rateResponse phttp.RateResponse
+	var rateResponse pkg.RateResponse
 	var err = json.NewDecoder(response.Body).Decode(&rateResponse)
 	require.Nil(t, err)
 	require.Equal(t, someRate.Rate.String(), rateResponse.Data)
@@ -129,7 +129,7 @@ func TestAtHandlerSuccess(t *testing.T) {
 		return
 	}
 
-	var httpFunc = phttp.GetLatestAt(rates, fiat, coin)
+	var httpFunc = pkg.GetLatestAt(rates, fiat, coin)
 
 	var response = httptest.NewRecorder()
 
@@ -147,7 +147,7 @@ func TestAtHandlerSuccess(t *testing.T) {
 	require.NotEqual(t, 0, response.Body.Len())
 	require.Equal(t, http.StatusOK, response.Code)
 
-	var rateResponse phttp.RateResponse
+	var rateResponse pkg.RateResponse
 	var err = json.NewDecoder(response.Body).Decode(&rateResponse)
 	require.Nil(t, err)
 	require.Equal(t, someRate.Rate.String(), rateResponse.Data)
@@ -159,7 +159,7 @@ func TestAtHandlerValidation(t *testing.T) {
 		rate = someRate
 		return
 	}
-	var httpFunc = phttp.GetLatestAt(rates, fiat, coin)
+	var httpFunc = pkg.GetLatestAt(rates, fiat, coin)
 
 	var table = []struct {
 		t      string
@@ -230,7 +230,7 @@ func TestAverageHandlerValidation(t *testing.T) {
 		return []btclists.Rate{someRate}, nil
 	}
 
-	var httpFunc = phttp.GetAverageFor(rates, fiat, coin)
+	var httpFunc = pkg.GetAverageFor(rates, fiat, coin)
 
 	var now = time.Now()
 	var table = []struct {

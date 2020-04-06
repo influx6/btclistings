@@ -38,13 +38,14 @@ type Client interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// TimeRateService exposes a method to retrieve giving
+// RateExchange exposes a method to retrieve giving
 // rate for coin to fiat within a giving duration.
-type TimeRateService interface {
-	Rate(ctx context.Context, coin string, fiat string, duration time.Duration) (Rate, error)
+type RateExchange interface {
+	Rate(ctx context.Context, coin string, fiat string, duration time.Time) (Rate, error)
+	Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time, limit int) ([]Rate, error)
 }
 
-type RateServer interface {
+type RateService interface {
 	// At returns giving crypto-currency pair exchange around provided time stamp.
 	At(ctx context.Context, crypto string, fiat string, when time.Time) (Rate, error)
 
@@ -54,9 +55,4 @@ type RateServer interface {
 	// Range returns all known Rate for crypto-currency and fiat-currency pair within
 	// time range (i.e from 'start' to 'end' time range)
 	Range(ctx context.Context, crypto string, currency string, start time.Time, end time.Time) ([]Rate, error)
-}
-
-type RateStore interface {
-	// Add adds Rate into underline store.
-	Add(ctx context.Context, data Rate) error
 }
