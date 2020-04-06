@@ -10,8 +10,6 @@ import (
 )
 
 const (
-	CryptoCoin     = "BTC"
-	FiatCurrency   = "USD"
 	DateFormat     = "2006-01-02"
 	DateTimeFormat = time.RFC3339
 )

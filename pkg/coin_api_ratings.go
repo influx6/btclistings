@@ -52,13 +52,14 @@ func (t *CoinAPIRatingService) Wait() {
 // Latest implements RateService.Latest method, fulfilling RateService contract.
 func (t *CoinAPIRatingService) Latest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
 	var latest, err = t.tdb.Latest(ctx, coin, fiat)
+
 	// if db has no latest ratings data, then fallback quickly to API
 	// hopefully db isn't gone rouge or something, and should be ready before
 	// next request.
 	if err != nil {
 		log.Printf("[ERROR] | DB just said no, find out why | %s\n", err)
 
-		if latest, err = t.updateDBWithLatestRating(ctx); err != nil && err != ErrDBError {
+		if latest, err = t.getAndUpdateWithLatest(ctx); err != nil && err != ErrDBError {
 			log.Printf("[ERROR] | Oh, we are in trouble now | %s\n", err)
 			return latest, err
 		}
@@ -69,6 +70,9 @@ func (t *CoinAPIRatingService) Latest(ctx context.Context, coin string, fiat str
 }
 
 // At implements RateService.At method, fulfilling RateService contract.
+//
+// Function may return retrieved result with error if db insertion failed.
+// Handle as you wish.
 func (t *CoinAPIRatingService) At(ctx context.Context, coin string, fiat string, ts time.Time) (btclists.Rate, error) {
 	var ratingForTime, err = t.tdb.At(ctx, coin, fiat, ts)
 	if err == nil {
@@ -94,14 +98,13 @@ func (t *CoinAPIRatingService) At(ctx context.Context, coin string, fiat string,
 
 	// Save new rating data to db.
 	if dbErr := t.tdb.Add(ratingFromAPI); dbErr != nil {
-		log.Printf("[CRITICAL] | Failed to save rating to db | %s\n", err)
-		// Do not halt response, just ensure our notification system
-		// has notified person in charge of db failure.
-		//
-		// Worse case, request failed and endpoint would respond accordingly.
+		log.Printf("[CRITICAL] | Failed to save rating to db | %s\n", dbErr)
+
+		// Returning rating with DBError error.
+		return ratingFromAPI, ErrDBError
 	}
 
-	return ratingFromAPI, err
+	return ratingFromAPI, nil
 }
 
 /* Range implements RateService.Range method, fulfilling RateService contract.
@@ -171,10 +174,10 @@ func (t *CoinAPIRatingService) Range(ctx context.Context, coin string, fiat stri
 	return results, err
 }
 
-// updateDBWithLatestRating fetches current coin-fiat rating from API, it
+// getAndUpdateWithLatest fetches current coin-fiat rating from API, it
 // may return fetched ratings with error if db, fails to insert ratings
 // successfully.
-func (t *CoinAPIRatingService) updateDBWithLatestRating(ctx context.Context) (btclists.Rate, error) {
+func (t *CoinAPIRatingService) getAndUpdateWithLatest(ctx context.Context) (btclists.Rate, error) {
 	// retrieve latest ratings pair for current time.
 	var latestRating, err = t.exchange.Rate(ctx, t.coin, t.fiat, zeroTime)
 	if err != nil {
@@ -190,7 +193,7 @@ func (t *CoinAPIRatingService) updateDBWithLatestRating(ctx context.Context) (bt
 	return latestRating, err
 }
 
-func (t *CoinAPIRatingService) manageLatestWorker() error {
+func (t *CoinAPIRatingService) manageLatestWorker() {
 	t.workers.Add(1)
 	go func() {
 		defer t.workers.Done()
@@ -198,8 +201,8 @@ func (t *CoinAPIRatingService) manageLatestWorker() error {
 		var ticker = time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 
-		if _, err := t.updateDBWithLatestRating(t.ctx); err != nil {
-			log.Printf("[CRITICAL] | Failed initial latest update | %s\n", err)
+		if _, err := t.getAndUpdateWithLatest(t.ctx); err != nil {
+			log.Printf("[CRITICAL] | Failed initial latest request | %s\n", err)
 		}
 
 		for {
@@ -209,12 +212,10 @@ func (t *CoinAPIRatingService) manageLatestWorker() error {
 				return
 			case <-ticker.C:
 				// call db update method for latest ratings.
-				if _, err := t.updateDBWithLatestRating(t.ctx); err != nil {
+				if _, err := t.getAndUpdateWithLatest(t.ctx); err != nil {
 					log.Printf("[CRITICAL] | DB won't agree, we lost this one | %s\n", err)
 				}
 			}
 		}
 	}()
-
-	return nil
 }

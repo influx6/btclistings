@@ -14,6 +14,11 @@ import (
 	"github.com/go-chi/chi/middleware"
 )
 
+const (
+	CryptoCoin   = "BTC"
+	FiatCurrency = "USD"
+)
+
 var (
 	PORT            = os.Getenv("PORT")
 	HOST            = os.Getenv("HOST")
