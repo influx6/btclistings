@@ -126,7 +126,7 @@ func (c *CoinAPI) Rate(ctx context.Context, coin string, fiat string, time time.
 	rate.Rate = exchange.Rate
 	rate.Fiat = exchange.AssetIdQuote
 	rate.Coin = exchange.AssetIdBase
-	rate.Time = exchange.Time
+	rate.Date = exchange.Time
 	return rate, nil
 }
 
@@ -190,7 +190,7 @@ func (c *CoinAPI) Range(ctx context.Context, coin string, fiat string, from time
 	for _, candle := range sticks {
 		var rate btclists.Rate
 		rate.Rate = candle.PriceClose
-		rate.Time = candle.End
+		rate.Date = candle.End
 		rate.Fiat = fiat
 		rate.Coin = coin
 		rates = append(rates, rate)

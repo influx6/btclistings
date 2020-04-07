@@ -20,10 +20,10 @@ var (
 type CoinAPIRatingService struct {
 	fiat     string
 	coin     string
+	exchange *CoinAPI
 	tdb      btclists.RateDB
 	ctx      context.Context
 	workers  sync.WaitGroup
-	exchange *CoinAPI
 }
 
 func NewCoinAPIRatingService(ctx context.Context, db btclists.RateDB, exchange *CoinAPI, coin string, fiat string) *CoinAPIRatingService {
@@ -135,7 +135,7 @@ func (t *CoinAPIRatingService) Range(ctx context.Context, coin string, fiat stri
 	}
 
 	// this is in the future
-	if from.After(latest.Time) {
+	if from.After(latest.Date) {
 		return results, nil
 	}
 
@@ -148,7 +148,7 @@ func (t *CoinAPIRatingService) Range(ctx context.Context, coin string, fiat stri
 
 	// if we are outside oldest, then pull directly from API
 	// and serve that as results after saving batch.
-	if from.Before(oldest.Time) {
+	if from.Before(oldest.Date) {
 		var apiErr error
 		results, apiErr = t.exchange.Range(ctx, coin, fiat, from, to, PeriodInterval, MaxLimit)
 		if apiErr != nil {

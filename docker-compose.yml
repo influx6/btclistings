@@ -2,8 +2,8 @@ version: '3.1'
 
 services:
   db:
-    container_name: timescale
-    image: timescale/timescaledb:latest-pg11
+    container_name: postgre
+    image: postgres
     volumes:
       - "./data/conn:/var/run/postgresql"
       - "./data/db:/var/lib/postgresql/data"
@@ -13,8 +13,8 @@ services:
     expose:
       - 5432
     environment:
-      POSTGRES_USER: starcraft
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: starcraft
-      POSTGRES_DB: btc_listings
+      POSTGRES_DB: postgres
       PGDATA: /var/lib/postgresql/data
 

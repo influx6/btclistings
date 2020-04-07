@@ -22,17 +22,18 @@ var (
 )
 
 type Rate struct {
-	Time time.Time       `json:"time"`
-	Rate decimal.Decimal `json:"rate"`
-	Coin string          `json:"coin"`
-	Fiat string          `json:"fiat"`
+	Id   int             `json:"id" yaml:"id"`
+	Date time.Time       `json:"date" yaml:"date"`
+	Rate decimal.Decimal `json:"rate" yaml:"rate"`
+	Coin string          `json:"coin" yaml:"coin"`
+	Fiat string          `json:"fiat" yaml:"fiat"`
 }
 
 // Client is defined here as an interface for 2 specific reasons:
 //
 // 1. Easier to swap underline client handling request easily.
 // 2. If we so wish to provide coverage tests for the code built
-// 	  to handle responses from endpoint becomes easier.
+// 	  to handle responses from endpoint, this becomes easier.
 //
 type Client interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -52,16 +53,6 @@ type RateService interface {
 
 // RateDB defines expectation for minimum support required
 // a db store for storing and retrieving Rates.
-//
-// NOTE To Reviewer: There are times when being specific and tying implementation
-// details together is far better than an interface, say a higher level struct which
-// may need deeper level access to another implementation details (usually internal to a pkg).
-//
-// The level for this need is high enough for me to abstract necessary methods
-// as a contract, but this may not always be the case. It is tempting to define
-// everything with interfaces but this can lead to Interface poisoning. Also
-// interfaces do come with allocation cost.
-//
 type RateDB interface {
 	RateService
 

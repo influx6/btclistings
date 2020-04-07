@@ -30,7 +30,7 @@ var (
 	someOtherTimeFormatted = someTimeLater.Format(btclists.DateTimeFormat)
 	someRate               = btclists.Rate{
 		Rate: decimal.NewFromFloat(43.322),
-		Time: someTime,
+		Date: someTime,
 		Coin: COIN,
 		Fiat: FIAT,
 	}
