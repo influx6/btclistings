@@ -11,10 +11,6 @@ import (
 	"github.com/influx6/btclists"
 )
 
-const (
-	acceptableRange = 1 * time.Minute
-)
-
 var (
 	zeroTime                 = time.Time{}
 	ErrDBError               = errors.New("db error occurred")
