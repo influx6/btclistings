@@ -17,7 +17,7 @@ would do fine as the fine-grained time queries provided by either option (Influx
 ## Chosen API
 
 I chose to use [Coin API](https://www.coinapi.io/) as the rating API integration for 
-the project. So you will need to provide these as either an environment variable `COIN_API_TOKEN`
+the project. So you will need to provide this as either an environment variable `COIN_API_TOKEN`
 or as part of a `.env` file.
 
 Coin API seems to have a hard requirements on request hit based on accounts, so might quickly hit limit
