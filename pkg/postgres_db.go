@@ -18,10 +18,6 @@ import (
 	"github.com/jackc/pgtype"
 )
 
-const (
-	acceptableRange = 20 * time.Second
-)
-
 type PostgresDB struct {
 	db    *sql.DB
 	table string
@@ -160,7 +156,7 @@ func (t *PostgresDB) Oldest(ctx context.Context, coin string, fiat string) (btcl
 }
 
 // At tries to retrieve ratings at giving timestamp but if such rating for exactly the giving
-// time is not available, then the next rating within a 1 min range would be returned.
+// time is not available, then an error is returned.
 func (t *PostgresDB) At(ctx context.Context, coin string, fiat string, tm time.Time) (btclists.Rate, error) {
 	var q = t.sdb.
 		Select("t.id", "t.date", "t.rate", "t.coin", "t.fiat").
@@ -170,9 +166,8 @@ func (t *PostgresDB) At(ctx context.Context, coin string, fiat string, tm time.T
 			"t.fiat": fiat,
 		}).
 		Where(
-			"t.date BETWEEN $3::timestamp AND $4::timestamp",
+			"t.date = $3::timestamp",
 			tm.Format(btclists.DateTimeFormat),
-			tm.Add(acceptableRange).Format(btclists.DateTimeFormat), // scale this over 1 minutes, so we should be able to get exact or closest.
 		).
 		OrderBy("t.date ASC").
 		Limit(1)

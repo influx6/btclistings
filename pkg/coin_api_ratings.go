@@ -11,6 +11,10 @@ import (
 	"github.com/influx6/btclists"
 )
 
+const (
+	acceptableRange = 1 * time.Minute
+)
+
 var (
 	zeroTime                 = time.Time{}
 	ErrDBError               = errors.New("db error occurred")
@@ -135,7 +139,7 @@ func (t *CoinRatingService) At(ctx context.Context, coin string, fiat string, ts
 	//   this way we mitigate future trips to API (using up precious credits or limits) for possible time ranges
 	//	 within this window. But this also needs to be done with consideration to our exchange rate data hold policy.
 	//
-	// We will keep it simple for now, so option 1.
+	// For now, we will keep it simple, so option 1.
 	var ratingFromAPI, apiErr = t.exchange.Rate(ctx, coin, fiat, ts)
 	if apiErr != nil {
 		log.Printf("[BTC Listings] | [ERROR] | API has failed us | %s\n", err)

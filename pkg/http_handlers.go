@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	ErrInvalidTimestamp   = errors.New("timestamp is not valid")
-	ErrSameTimeNotAllowed = errors.New("time range can not be the same")
-	ErrNoTimestamp        = errors.New("no timestamp provided, use t query")
+	ErrInvalidTimestamp = errors.New("timestamp is not valid")
+	ErrNoTimestamp      = errors.New("no timestamp provided, use t query")
+	ErrUnableToService  = errors.New("unable to service request at the moment")
 )
 
 type RateResponse struct {
@@ -49,7 +49,7 @@ func GetLatest(rates btclists.RateService, fiat string, coin string) http.Handle
 			}
 
 			writer.WriteHeader(http.StatusInternalServerError)
-			respondWithError(writer, err)
+			respondWithError(writer, ErrUnableToService)
 			return
 		}
 
@@ -86,7 +86,7 @@ func GetLatestAt(rates btclists.RateService, fiat string, coin string) http.Hand
 			}
 
 			writer.WriteHeader(http.StatusInternalServerError)
-			respondWithError(writer, rateErr)
+			respondWithError(writer, ErrUnableToService)
 			return
 		}
 
@@ -148,7 +148,7 @@ func GetAverageFor(averageService btclists.RatingsAverageService, ratingService 
 				}
 
 				writer.WriteHeader(http.StatusInternalServerError)
-				respondWithError(writer, atErr)
+				respondWithError(writer, ErrUnableToService)
 				return
 			}
 
