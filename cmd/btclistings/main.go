@@ -24,8 +24,8 @@ const (
 var (
 	PORT           = os.Getenv("PORT")
 	HOST           = os.Getenv("HOST")
-	COIN_API_TOKEN = os.Getenv("COIN_API_TOKEN")
 	DATABASE_URL   = os.Getenv("DATABASE_URL")
+	COIN_API_TOKEN = os.Getenv("COIN_API_TOKEN")
 
 	httpClient = &http.Client{
 		Timeout: time.Second * 10,
@@ -83,8 +83,8 @@ func main() {
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)
-	router.Get("/latest", pkg.GetLatest(ratingService, FiatCurrency, CryptoCoin))
 	router.Get("/at", pkg.GetLatestAt(ratingService, FiatCurrency, CryptoCoin))
+	router.Get("/latest", pkg.GetLatest(ratingService, FiatCurrency, CryptoCoin))
 	router.Get("/avg", pkg.GetAverageFor(ratingService, ratingService, FiatCurrency, CryptoCoin))
 
 	var addr = fmt.Sprintf("%s:%s", HOST, PORT)
