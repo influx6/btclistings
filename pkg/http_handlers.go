@@ -153,6 +153,7 @@ func GetAverageFor(averageService btclists.RatingsAverageService, ratingService 
 			}
 
 			respondWithRate(writer, atRating.Rate)
+			return
 		}
 
 		var average, avgErr = averageService.AverageForRange(request.Context(), coin, fiat, from, to)
