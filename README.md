@@ -30,7 +30,10 @@ make up
 ```
 
 Beyond requiring docker-compose and docker (which most do have), with that simple command,
-the necessary server and database would be booted up ready for testing.
+the necessary server and database would be booted up ready for testing. Do note that due to 
+not setting up `a wait till db is ready before running server` type of script, docker-compose will
+attempt to restart the server until it can successfully connect to the database, as the database
+setups and executes migration scripts to prepare the db and table.
 
 ## Running without Docker-Compose
 
