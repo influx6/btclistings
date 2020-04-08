@@ -223,10 +223,13 @@ func TestAtHandlerValidation(t *testing.T) {
 func TestAverageHandlerValidation(t *testing.T) {
 	var rates = new(RateServerMock)
 	rates.AverageForRangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (decimal.Decimal, error) {
-		return decimal.NewFromFloat(34.32), nil
+		return someRate.Rate, nil
+	}
+	rates.AtFunc = func(ctx context.Context, cn string, ft string, from time.Time) (btclists.Rate, error) {
+		return someRate, nil
 	}
 
-	var httpFunc = pkg.GetAverageFor(rates, FIAT, COIN)
+	var httpFunc = pkg.GetAverageFor(rates, rates, FIAT, COIN)
 
 	var now = time.Now()
 	var table = []struct {
@@ -242,7 +245,7 @@ func TestAverageHandlerValidation(t *testing.T) {
 		{
 			status: http.StatusOK,
 			from:   now.Format(btclists.DateTimeFormat),
-			to:     now.Format(btclists.DateTimeFormat),
+			to:     now.Add(time.Second).Format(btclists.DateFormat),
 		},
 		{
 			status: http.StatusBadRequest,
@@ -258,6 +261,11 @@ func TestAverageHandlerValidation(t *testing.T) {
 			status: http.StatusBadRequest,
 			from:   now.Format(btclists.DateTimeFormat),
 			to:     now.Add(time.Minute * 1).Format(time.ANSIC),
+		},
+		{
+			status: http.StatusOK,
+			from:   now.Format(btclists.DateTimeFormat),
+			to:     now.Format(btclists.DateTimeFormat),
 		},
 	}
 

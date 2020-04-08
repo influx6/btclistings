@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	ErrInvalidTimestamp = errors.New("timestamp is not valid")
-	ErrNoTimestamp      = errors.New("no timestamp provided, use t query")
+	ErrInvalidTimestamp   = errors.New("timestamp is not valid")
+	ErrSameTimeNotAllowed = errors.New("time range can not be the same")
+	ErrNoTimestamp        = errors.New("no timestamp provided, use t query")
 )
 
 type RateResponse struct {
@@ -127,7 +128,7 @@ func validateTimestampString(t string) (time.Time, error) {
 // Response: { data: {price} } where 'price' is a float64 type.
 // Error Response: { error: {error text} } with status code in range 400-500.
 //
-func GetAverageFor(server btclists.RatingsAverageService, fiat string, coin string) http.HandlerFunc {
+func GetAverageFor(averageService btclists.RatingsAverageService, ratingService btclists.RateService, fiat string, coin string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var from, to, err = validateAndRetrieveStartAndEndTimestamps(request)
 		if err != nil {
@@ -136,7 +137,25 @@ func GetAverageFor(server btclists.RatingsAverageService, fiat string, coin stri
 			return
 		}
 
-		var average, avgErr = server.AverageForRange(request.Context(), coin, fiat, from, to)
+		// if we are giving same time, just divert to at call
+		if from.Equal(to) {
+			var atRating, atErr = ratingService.At(request.Context(), coin, fiat, from)
+			if atErr != nil {
+				if atErr == btclists.ErrRateNotFound {
+					writer.WriteHeader(http.StatusNotFound)
+					respondWithError(writer, atErr)
+					return
+				}
+
+				writer.WriteHeader(http.StatusInternalServerError)
+				respondWithError(writer, atErr)
+				return
+			}
+
+			respondWithRate(writer, atRating.Rate)
+		}
+
+		var average, avgErr = averageService.AverageForRange(request.Context(), coin, fiat, from, to)
 		if avgErr != nil {
 			if avgErr == btclists.ErrRateNotFound {
 				writer.WriteHeader(http.StatusNotFound)

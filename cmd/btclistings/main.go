@@ -85,7 +85,7 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Get("/latest", pkg.GetLatest(ratingService, FiatCurrency, CryptoCoin))
 	router.Get("/at", pkg.GetLatestAt(ratingService, FiatCurrency, CryptoCoin))
-	router.Get("/avg", pkg.GetAverageFor(ratingService, FiatCurrency, CryptoCoin))
+	router.Get("/avg", pkg.GetAverageFor(ratingService, ratingService, FiatCurrency, CryptoCoin))
 
 	var addr = fmt.Sprintf("%s:%s", HOST, PORT)
 	var server = &http.Server{
