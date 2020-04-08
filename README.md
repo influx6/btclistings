@@ -47,7 +47,7 @@ docker run --rm -p 80:80 test-server
 For this to work, do be aware that, said setup must have the following:
 
 - A boot up PostGreSQL database running (as the server would check and panic if not available)
-- Token and configuration feed into environment using environment variables or as prescribed environment files
+- Token and configurations variables fed into environment using either `.env` file or plain environment variables.
 
 I intentionally, added the [docker-compose.local.yml](./docker-compose.local.yml) to ease this needs so that testing
 said application would be easier.
