@@ -1,4 +1,4 @@
-token?=''
+COIN_API_TOKEN?=
 POSTGRES_USER?=postgres
 POSTGRES_PASSWORD?=starcraft
 POSTGRES_HOST=localhost:5432
@@ -11,14 +11,20 @@ build:
 prod:
 	docker run -it --rm -p 80:80  btc_listing_server
 
-up:
-	env DATABASE_URL="${DATABASE_URL}" docker-compose up
+db-up:
+	docker-compose up
 
-down:
+db-down:
 	docker-compose down
 
+up:
+	docker-compose -f docker-compose.local.yml up
+
+down:
+	docker-compose -f docker-compose.local.yml down
+
 run:
-	env COIN_API_TOKEN=${token} DATABASE_URL=${DATABASE_URL} HOST="localhost" PORT="3040" go run cmd/btclistings/main.go
+	env COIN_API_TOKEN=${COIN_API_TOKEN} DATABASE_URL=${DATABASE_URL} HOST="localhost" PORT="3040" go run cmd/btclistings/main.go
 
 test: unit
 

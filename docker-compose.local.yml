@@ -1,0 +1,41 @@
+version: '3.1'
+
+services:
+  db:
+    container_name: postgre
+    image: postgres
+    volumes:
+      - "./data/conn:/var/run/postgresql"
+      - "./data/db:/var/lib/postgresql/data"
+      - "./migrations:/docker-entrypoint-initdb.d"
+    networks:
+      - services
+    ports:
+      - 5432:5432
+    expose:
+      - 5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: starcraft
+      POSTGRES_DB: postgres
+      PGDATA: /var/lib/postgresql/data
+
+  api:
+    container_name: btc_listings
+    restart: unless-stopped
+    networks:
+      - services
+    depends_on:
+      - db
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    env_file:
+      - ./.env
+    ports:
+      - 80:80
+    expose:
+      - 80
+
+networks:
+  services:
