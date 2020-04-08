@@ -1,7 +1,6 @@
 package pkg_test
 
 import (
-	"bytes"
 	"time"
 
 	"github.com/influx6/btclists"
@@ -15,17 +14,9 @@ const (
 	FIAT     = "USD"
 )
 
-type ClosingBuffer struct {
-	*bytes.Buffer
-}
-
-func (b *ClosingBuffer) Close() error {
-	return nil
-}
-
 var (
-	someTime               = time.Now()
-	someTimeLater          = someTime.Add(time.Hour * 3600)
+	someTime               = time.Now().UTC()
+	someTimeLater          = someTime.Add(time.Hour * 3600).UTC()
 	someTimeFormatted      = someTime.Format(btclists.DateTimeFormat)
 	someOtherTimeFormatted = someTimeLater.Format(btclists.DateTimeFormat)
 	someRate               = btclists.Rate{

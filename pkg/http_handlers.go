@@ -18,7 +18,7 @@ var (
 )
 
 type RateResponse struct {
-	Data string `json:"rate"`
+	Data string `json:"data"`
 }
 
 type RateError struct {
@@ -80,12 +80,12 @@ func GetLatestAt(rates btclists.RateService, fiat string, coin string) http.Hand
 		if rateErr != nil {
 			if rateErr == btclists.ErrRateNotFound {
 				writer.WriteHeader(http.StatusNotFound)
-				respondWithError(writer, err)
+				respondWithError(writer, rateErr)
 				return
 			}
 
 			writer.WriteHeader(http.StatusInternalServerError)
-			respondWithError(writer, err)
+			respondWithError(writer, rateErr)
 			return
 		}
 
@@ -108,12 +108,12 @@ func validateTimestampString(t string) (time.Time, error) {
 
 	// is this a RFC3339 or ISO 8601 date timestamp?
 	if dateTime, err := time.Parse(btclists.DateTimeFormat, t); err == nil {
-		return dateTime, nil
+		return dateTime.UTC(), nil
 	}
 
 	// is this just a simple date format YYYY-MM-DD ?
 	if date, err := time.Parse(btclists.DateFormat, t); err == nil {
-		return date, nil
+		return date.UTC(), nil
 	}
 
 	return time.Time{}, ErrInvalidTimestamp

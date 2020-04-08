@@ -20,7 +20,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 --username "$POSTGRES_US
         rate NUMERIC NOT NULL,
         coin VARCHAR(7) NOT NULL,
         fiat VARCHAR(7) NOT NULL,
-        date TIMESTAMPTZ UNIQUE NOT NULL
+        date TIMESTAMP UNIQUE NOT NULL
     );
 
     -- Alter table to add primary keys, hyper table requires
@@ -45,7 +45,7 @@ PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 --username "$POSTGRES_US
         rate NUMERIC NOT NULL,
         coin VARCHAR(7) NOT NULL,
         fiat VARCHAR(7) NOT NULL,
-        date TIMESTAMPTZ UNIQUE NOT NULL
+        date TIMESTAMP UNIQUE NOT NULL
     );
 
     -- Alter table to add primary keys, hyper table requires

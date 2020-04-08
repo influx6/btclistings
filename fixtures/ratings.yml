@@ -2,84 +2,61 @@
 
 - id: 1
   rate: 6413.121232
-  date: 2020-04-07T17:59:19+08:00
+  date: 2020-04-08T13:56:48Z
   coin: BTC
   fiat: USD
 
 - id: 2
   rate: 9429.121232
-  date: 2020-04-07T18:00:19+08:00
+  date: 2020-04-08T14:06:48Z
   coin: BTC
   fiat: USD
 
 - id: 3
   rate: 373.121232
-  date: 2020-04-07T18:01:19+08:00
+  date: 2020-04-08T14:16:48Z
   coin: BTC
   fiat: USD
 
 - id: 4
   rate: 523.121232
-  date: 2020-04-07T18:02:19+08:00
+  date: 2020-04-08T14:26:48Z
   coin: BTC
   fiat: USD
 
 - id: 5
   rate: 423.121232
-  date: 2020-04-07T18:03:19+08:00
+  date: 2020-04-08T14:36:48Z
   coin: BTC
   fiat: USD
 
 - id: 6
   rate: 525.121232
-  date: 2020-04-07T18:04:19+08:00
+  date: 2020-04-08T14:46:48Z
   coin: BTC
   fiat: USD
 
 - id: 7
   rate: 383.121232
-  date: 2020-04-07T18:14:19+08:00
+  date: 2020-04-08T14:56:48Z
   coin: BTC
   fiat: USD
 
 - id: 8
   rate: 1423.121232
-  date: 2020-04-07T18:34:19+08:00
+  date: 2020-04-08T15:16:48Z
   coin: BTC
   fiat: USD
 
 - id: 9
   rate: 2423.121232
-  date: 2020-04-07T18:44:19+08:00
+  date: 2020-04-08T15:26:48Z
   coin: BTC
   fiat: USD
 
 - id: 10
   rate: 7423.121232
-  date: 2020-04-07T18:54:19+08:00
+  date: 2020-04-08T15:36:48Z
   coin: BTC
   fiat: USD
 
-- id: 11
-  rate: 423.121232
-  date: 2020-04-07T19:14:19+08:00
-  coin: BTC
-  fiat: USD
-
-- id: 12
-  rate: 33.1212
-  date: 2020-04-07T19:34:19+08:00
-  coin: BTC
-  fiat: USD
-
-- id: 13
-  rate: 423.121232
-  date: 2020-04-07T19:44:19+08:00
-  coin: BTC
-  fiat: USD
-
-- id: 14
-  rate: 343.12122
-  date: 2020-04-07T20:44:19+08:00
-  coin: BTC
-  fiat: USD

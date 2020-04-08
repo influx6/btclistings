@@ -17,9 +17,9 @@ import (
 
 const (
 	MaxLimit          = 5000
-	PeriodInterval    = "5MIN"
-	CoinApiProdURL    = "https://rest.coinapi.io/"
-	CoinApiSandboxURL = "https://rest-sandbox.coinapi.io/"
+	PeriodInterval    = "2MIN"
+	CoinApiProdURL    = "https://rest.coinapi.io"
+	CoinApiSandboxURL = "https://rest-sandbox.coinapi.io"
 )
 
 var (
@@ -126,7 +126,7 @@ func (c *CoinAPI) Rate(ctx context.Context, coin string, fiat string, time time.
 	rate.Rate = exchange.Rate
 	rate.Fiat = exchange.AssetIdQuote
 	rate.Coin = exchange.AssetIdBase
-	rate.Date = exchange.Time
+	rate.Date = exchange.Time.UTC()
 	return rate, nil
 }
 

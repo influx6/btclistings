@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"sync"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -30,53 +29,86 @@ type CoinMarketAPI interface {
 	Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time, limit int) ([]btclists.Rate, error)
 }
 
+// PeriodicRatingUpdates boots up a loop to periodically pull latest ratings from
+// provided exchange service, adding new records to provided db.
+func PeriodicRatingUpdate(ctx context.Context, tdb btclists.RatesDB, exchange CoinMarketAPI, coin string, fiat string) {
+	var ticker = time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// time to end this.
+			return
+		case <-ticker.C:
+			// call db update method for latest ratings.
+			// retrieve latest ratings pair for current time.
+			var latestRating, err = exchange.Rate(ctx, coin, fiat, zeroTime)
+			if err != nil {
+				log.Printf("[BTC Listings] | [ERROR] | Failed to update latest rating  | %s\n", err)
+				continue
+			}
+
+			// send latest ratings into db.
+			if dbErr := tdb.Add(ctx, latestRating); dbErr != nil {
+				log.Printf("[BTC Listings] | [CRITICAL] | Bad News, Failed to update db | %s\n", dbErr)
+				continue
+			}
+
+			log.Printf("[BTC Listings] | [LOG] | updated latest ratings | %s | %s\n", latestRating.Date, latestRating.Rate)
+		}
+	}
+}
+
+//*********************************************
+// CoinRatingService
+//*********************************************
+
 // CoinRatingService implements the btclists.RateService, and periodically
 // pulls latest exchange rate from db per minute.
 type CoinRatingService struct {
-	fiat     string
-	coin     string
 	exchange CoinMarketAPI
 	tdb      btclists.RatesDB
 	ctx      context.Context
-	workers  sync.WaitGroup
 }
 
-func NewCoinRatingService(ctx context.Context, db btclists.RatesDB, exchange CoinMarketAPI, coin string, fiat string) *CoinRatingService {
-	var waiter sync.WaitGroup
-	txp := &CoinRatingService{
-		fiat:     fiat,
-		coin:     coin,
+func NewCoinRatingService(ctx context.Context, db btclists.RatesDB, exchange CoinMarketAPI) *CoinRatingService {
+	return &CoinRatingService{
 		ctx:      ctx,
 		tdb:      db,
-		workers:  waiter,
 		exchange: exchange,
 	}
-
-	// spawn single worker for latest
-	txp.manageLatestWorker()
-
-	return txp
-}
-
-func (t *CoinRatingService) Wait() {
-	t.workers.Wait()
 }
 
 // Latest implements RateService.Latest method, fulfilling RateService contract.
 func (t *CoinRatingService) Latest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
 	var latest, err = t.tdb.Latest(ctx, coin, fiat)
+	if err == nil {
+		log.Printf("[BTC Listings] | [INFO] | Retreive latest from db | %s | %s\n", latest.Date, latest.Rate)
+	}
 
 	// if db has no latest ratings data, then fallback quickly to API
 	// hopefully db isn't gone rouge or something, and should be ready before
 	// next request.
 	if err != nil {
-		log.Printf("[ERROR] | DB just said no, find out why | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | DB just said no record, find out why | %s\n", err)
 
-		if latest, err = t.getAndUpdateWithLatest(ctx); err != nil && err != ErrDBError {
-			log.Printf("[ERROR] | Oh, we are in trouble now | %s\n", err)
-			return latest, err
+		// retrieve latest ratings pair for current time.
+		latest, err = t.exchange.Rate(ctx, coin, fiat, zeroTime)
+		if err != nil {
+			log.Printf("[BTC Listings] | [ERROR] | Failed to update latest rating  | %s\n", err)
+			return btclists.Rate{}, nil
 		}
-		err = nil
+
+		log.Printf("[BTC Listings] | [INFO] | Retreive latest from API at | %s | %s\n", latest.Date, latest.Rate)
+
+		// send latest ratings into db.
+		if dbErr := t.tdb.Add(ctx, latest); dbErr != nil {
+			log.Printf("[BTC Listings] | [CRITICAL] | Bad News, Failed to update db | %s\n", dbErr)
+
+			// Return ErrDBError to signal to API we got result but DB insert went a wall
+			return latest, ErrDBError
+		}
 	}
 
 	return latest, err
@@ -89,6 +121,7 @@ func (t *CoinRatingService) Latest(ctx context.Context, coin string, fiat string
 func (t *CoinRatingService) At(ctx context.Context, coin string, fiat string, ts time.Time) (btclists.Rate, error) {
 	var ratingForTime, err = t.tdb.At(ctx, coin, fiat, ts)
 	if err == nil {
+		log.Printf("[BTC Listings] | [INFO] | Retreive record from db | %s | %s\n", ratingForTime.Date, ratingForTime.Rate)
 		return ratingForTime, nil
 	}
 
@@ -105,31 +138,41 @@ func (t *CoinRatingService) At(ctx context.Context, coin string, fiat string, ts
 	// We will keep it simple for now, so option 1.
 	var ratingFromAPI, apiErr = t.exchange.Rate(ctx, coin, fiat, ts)
 	if apiErr != nil {
-		log.Printf("[ERROR] | API has failed us | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | API has failed us | %s\n", err)
 		return btclists.Rate{}, apiErr
 	}
 
 	// Save new rating data to db.
 	if dbErr := t.tdb.Add(ctx, ratingFromAPI); dbErr != nil {
-		log.Printf("[CRITICAL] | Failed to save rating to db | %s\n", dbErr)
+		log.Printf("[BTC Listings] | [CRITICAL] | Failed to save rating to db | %s\n", dbErr)
 
 		// Returning rating with DBError error.
 		return ratingFromAPI, ErrDBError
 	}
 
+	log.Printf("[BTC Listings] | [INFO] | Retreive ratings from API at | %s | %s\n", ratingFromAPI.Date, ratingFromAPI.Rate)
 	return ratingFromAPI, nil
 }
 
-/* Average implements RatingsAverageServe interface.
+/* AverageForRange implements RatingsAverageServe interface.
 *
+* NOTE to reviewer:
 * If we can't find suitable records in db, then API will be used, else we pull
-* available records in DB, even if a bit lagging behind latest from API.
+* available records in DB, even if lagging behind latest from API.
+*
+* A possible alternative:
+*
+* If we wish to ensure consistent accurate response, then we can check if time
+* range completely exists in db, by checking `from` against latest and oldest record time,
+* if below oldest record time then check pull from API. If above latest record time,
+* then pull from API, else if within range, just use db record.
+*
 *
 * Note: Average will be returned if it was pulled from the API even if an error occurred
 * whilst saving retrieved ratings into DB. Caller should decide on how to proceed.
 *
  */
-func (t *CoinRatingService) Average(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) (decimal.Decimal, error) {
+func (t *CoinRatingService) AverageForRange(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) (decimal.Decimal, error) {
 	var average decimal.Decimal
 
 	// Do we have have any records for this range ?
@@ -144,8 +187,13 @@ func (t *CoinRatingService) Average(ctx context.Context, coin string, fiat strin
 	if total == 0 {
 		var results, apiErr = t.exchange.Range(ctx, coin, fiat, from, to, MaxLimit)
 		if apiErr != nil {
-			log.Printf("[ERROR] | API fails us | %s\n", apiErr)
+			log.Printf("[BTC Listings] | [ERROR] | API fails us | %s\n", apiErr)
 			return average, apiErr
+		}
+
+		if len(results) == 0 {
+			log.Println("[BTC Listings] | [INFO] | No records returned from API")
+			return average, nil
 		}
 
 		for _, result := range results {
@@ -156,7 +204,7 @@ func (t *CoinRatingService) Average(ctx context.Context, coin string, fiat strin
 
 		var dbSaveErr error
 		if dbSaveErr = t.tdb.AddBatch(ctx, results); dbSaveErr != nil {
-			log.Printf("[CRITICAL] | DB failures are not good | %s\n", dbSaveErr)
+			log.Printf("[BTC Listings] | [CRITICAL] | DB failures are not good | %s\n", dbSaveErr)
 		}
 
 		return average, dbSaveErr
@@ -165,8 +213,10 @@ func (t *CoinRatingService) Average(ctx context.Context, coin string, fiat strin
 	var err error
 	average, err = t.tdb.AverageForRange(ctx, coin, fiat, from, to)
 	if err != nil {
-		log.Printf("[ERROR] | Failed to retreive average | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | Failed to retreive average | %s\n", err)
 	}
+
+	log.Printf("[BTC Listings] | [INFO] | Retreive average | %s | %s | %s\n", from, to, average)
 	return average, err
 }
 
@@ -201,12 +251,12 @@ func (t *CoinRatingService) Range(ctx context.Context, coin string, fiat string,
 		var apiErr error
 		results, apiErr = t.exchange.Range(ctx, coin, fiat, from, to, MaxLimit)
 		if apiErr != nil {
-			log.Printf("[ERROR] | API fails us | %s\n", apiErr)
+			log.Printf("[BTC Listings] | [ERROR] | API fails us | %s\n", apiErr)
 			return results, apiErr
 		}
 
 		if dbSaveErr := t.tdb.AddBatch(ctx, results); dbSaveErr != nil {
-			log.Printf("[CRITICAL] | DB failures are not good | %s\n", dbSaveErr)
+			log.Printf("[BTC Listings] | [CRITICAL] | DB failures are not good | %s\n", dbSaveErr)
 			return results, dbSaveErr
 		}
 
@@ -216,49 +266,7 @@ func (t *CoinRatingService) Range(ctx context.Context, coin string, fiat string,
 	var err error
 	results, err = t.tdb.Range(ctx, coin, fiat, from, to)
 	if err != nil {
-		log.Printf("[ERROR] | failed to retrieve result | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | failed to retrieve result | %s\n", err)
 	}
 	return results, err
-}
-
-// getAndUpdateWithLatest fetches current coin-fiat rating from API, it
-// may return fetched ratings with error if db, fails to insert ratings
-// successfully.
-func (t *CoinRatingService) getAndUpdateWithLatest(ctx context.Context) (btclists.Rate, error) {
-	// retrieve latest ratings pair for current time.
-	var latestRating, err = t.exchange.Rate(ctx, t.coin, t.fiat, zeroTime)
-	if err != nil {
-		log.Printf("[ERROR] | Failed to update latest rating  | %s\n", err)
-		return btclists.Rate{}, nil
-	}
-
-	// send latest ratings into db.
-	if dbErr := t.tdb.Add(ctx, latestRating); dbErr != nil {
-		log.Printf("[CRITICAL] | Bad News, Failed to update db | %s\n", dbErr)
-		err = ErrDBError
-	}
-	return latestRating, err
-}
-
-func (t *CoinRatingService) manageLatestWorker() {
-	t.workers.Add(1)
-	go func() {
-		defer t.workers.Done()
-
-		var ticker = time.NewTicker(1 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-t.ctx.Done():
-				// time to end this.
-				return
-			case <-ticker.C:
-				// call db update method for latest ratings.
-				if _, err := t.getAndUpdateWithLatest(t.ctx); err != nil {
-					log.Printf("[CRITICAL] | DB won't agree, we lost this one | %s\n", err)
-				}
-			}
-		}
-	}()
 }

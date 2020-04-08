@@ -47,14 +47,11 @@ func TestRatingsDB_Add(t *testing.T) {
 
 	t.Logf("Should fail to add duplicate rate record")
 	{
-		require.Error(t, db.Add(context.Background(), rate))
-	}
+		require.NoError(t, db.Add(context.Background(), rate))
 
-	t.Logf("Should only have one rate record in db")
-	{
 		var count, countErr = getTableCount(db.DB(), tableName)
 		require.NoError(t, countErr)
-		require.Equal(t, count, 1)
+		require.Equal(t, 1, count)
 	}
 }
 
@@ -69,7 +66,7 @@ func TestRatingsDB_AddBatch_WithDups(t *testing.T) {
 	var rate btclists.Rate
 	rate.Fiat = FIAT
 	rate.Coin = COIN
-	rate.Date = time.Now()
+	rate.Date = time.Now().UTC()
 	rate.Rate = decimal.NewFromFloat(432.12)
 
 	var rates = []btclists.Rate{
@@ -88,7 +85,7 @@ func TestRatingsDB_AddBatch_WithDups(t *testing.T) {
 	{
 		var count, countErr = getTableCount(db.DB(), tableName)
 		require.NoError(t, countErr)
-		require.Equal(t, count, 1)
+		require.Equal(t, 1, count)
 	}
 }
 
@@ -101,14 +98,16 @@ func TestRatingsDB_Latest(t *testing.T) {
 		require.NoError(t, tearDownTable(db.DB(), tableName))
 	}()
 
-	var ts, terr = time.Parse(time.RFC3339, "2020-04-07T20:44:19+08:00")
-	require.NoError(t, terr)
-	require.False(t, ts.IsZero())
+	var fixtures, fixtureErr = getFixtures()
+	require.NoError(t, fixtureErr)
+
+	var target = fixtures[len(fixtures)-1]
 
 	var latest, lastErr = db.Latest(context.Background(), COIN, FIAT)
+
 	require.NoError(t, lastErr)
 	require.False(t, latest.Date.IsZero())
-	require.True(t, latest.Date.Equal(ts))
+	require.True(t, latest.Date.Equal(target.Date))
 }
 
 func TestRatingsDB_Oldest(t *testing.T) {
@@ -120,14 +119,15 @@ func TestRatingsDB_Oldest(t *testing.T) {
 		require.NoError(t, tearDownTable(db.DB(), tableName))
 	}()
 
-	var ts, terr = time.Parse(time.RFC3339, "2020-04-07T17:59:19+08:00")
-	require.NoError(t, terr)
-	require.False(t, ts.IsZero())
+	var fixtures, fixtureErr = getFixtures()
+	require.NoError(t, fixtureErr)
 
-	var latest, lastErr = db.Oldest(context.Background(), COIN, FIAT)
+	var target = fixtures[0]
+
+	var oldest, lastErr = db.Oldest(context.Background(), COIN, FIAT)
 	require.NoError(t, lastErr)
-	require.False(t, latest.Date.IsZero())
-	require.True(t, latest.Date.Equal(ts))
+	require.False(t, oldest.Date.IsZero())
+	require.True(t, oldest.Date.Equal(target.Date))
 }
 
 func TestRatingsDB_At(t *testing.T) {
@@ -139,15 +139,16 @@ func TestRatingsDB_At(t *testing.T) {
 		require.NoError(t, tearDownTable(db.DB(), tableName))
 	}()
 
-	var ts, terr = time.Parse(time.RFC3339, "2020-04-07T18:02:19+08:00")
-	require.NoError(t, terr)
-	require.False(t, ts.IsZero())
+	var fixtures, fixtureErr = getFixtures()
+	require.NoError(t, fixtureErr)
 
-	var latestAt, lastErr = db.At(context.Background(), COIN, FIAT, ts)
+	var first = fixtures[0]
+
+	var latestAt, lastErr = db.At(context.Background(), COIN, FIAT, first.Date)
 	require.NoError(t, lastErr)
-	require.Equal(t, 4, latestAt.Id)
-	require.Equal(t, "523.121232", latestAt.Rate.String())
-	require.Equal(t, ts, latestAt.Date)
+	require.Equal(t, 1, latestAt.Id)
+	require.Equal(t, "6413.121232", latestAt.Rate.String())
+	require.Equal(t, first.Date, latestAt.Date)
 }
 
 func TestRatingsDB_Range(t *testing.T) {
@@ -159,19 +160,17 @@ func TestRatingsDB_Range(t *testing.T) {
 		require.NoError(t, tearDownTable(db.DB(), tableName))
 	}()
 
-	var from, ferr = time.Parse(time.RFC3339, "2020-04-07T18:02:19+08:00")
-	require.NoError(t, ferr)
+	var fixtures, fixtureErr = getFixtures()
+	require.NoError(t, fixtureErr)
 
-	var to, terr = time.Parse(time.RFC3339, "2020-04-07T18:04:19+08:00")
-	require.NoError(t, terr)
+	var fromRate = fixtures[3]
+	var toRate = fixtures[5]
 
-	var records, lastErr = db.Range(context.Background(), COIN, FIAT, from, to)
+	var records, lastErr = db.Range(context.Background(), COIN, FIAT, fromRate.Date, toRate.Date)
 	require.NoError(t, lastErr)
 	require.NotNil(t, records)
 	require.Len(t, records, 3)
 
-	var fixtures, fixtureErr = getFixtures()
-	require.NoError(t, fixtureErr)
 	require.Equal(t, []btclists.Rate{fixtures[5], fixtures[4], fixtures[3]}, records)
 }
 
@@ -184,14 +183,11 @@ func TestRatingsDB_AverageForRange(t *testing.T) {
 		require.NoError(t, tearDownTable(db.DB(), tableName))
 	}()
 
-	var from, ferr = time.Parse(time.RFC3339, "2020-04-07T18:02:19+08:00")
-	require.NoError(t, ferr)
-
-	var to, terr = time.Parse(time.RFC3339, "2020-04-07T18:04:19+08:00")
-	require.NoError(t, terr)
-
 	var fixtures, fixtureErr = getFixtures()
 	require.NoError(t, fixtureErr)
+
+	var fromRate = fixtures[3]
+	var toRate = fixtures[5]
 
 	var expectedAvg = decimal.NewFromFloat(0)
 	expectedAvg = expectedAvg.Add(fixtures[5].Rate)
@@ -199,7 +195,7 @@ func TestRatingsDB_AverageForRange(t *testing.T) {
 	expectedAvg = expectedAvg.Add(fixtures[3].Rate)
 	expectedAvg = expectedAvg.Div(decimal.NewFromFloat(3))
 
-	var avg, lastErr = db.AverageForRange(context.Background(), COIN, FIAT, from, to)
+	var avg, lastErr = db.AverageForRange(context.Background(), COIN, FIAT, fromRate.Date, toRate.Date)
 	require.NoError(t, lastErr)
 	require.NotEmpty(t, expectedAvg, avg)
 }
@@ -213,13 +209,13 @@ func TestRatingsDB_CountForRange(t *testing.T) {
 		require.NoError(t, tearDownTable(db.DB(), tableName))
 	}()
 
-	var from, ferr = time.Parse(time.RFC3339, "2020-04-07T18:02:19+08:00")
-	require.NoError(t, ferr)
+	var fixtures, fixtureErr = getFixtures()
+	require.NoError(t, fixtureErr)
 
-	var to, terr = time.Parse(time.RFC3339, "2020-04-07T18:04:19+08:00")
-	require.NoError(t, terr)
+	var fromRate = fixtures[3]
+	var toRate = fixtures[5]
 
-	var count, lastErr = db.AverageForRange(context.Background(), COIN, FIAT, from, to)
+	var count, lastErr = db.AverageForRange(context.Background(), COIN, FIAT, fromRate.Date, toRate.Date)
 	require.NoError(t, lastErr)
 	require.NotEmpty(t, 3, count)
 }

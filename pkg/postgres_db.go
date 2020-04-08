@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	acceptableRange = 5 * time.Minute
+	acceptableRange = 20 * time.Second
 )
 
 type PostgresDB struct {
@@ -58,20 +58,22 @@ func (t *PostgresDB) Close() error {
 func (t *PostgresDB) Add(ctx context.Context, rate btclists.Rate) error {
 	var rating, err = rate.Rate.Value()
 	if err != nil {
-		log.Printf("[ERROR] | [DB] | Failed transform decimal rating to db.Value | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed transform decimal rating to db.Value | %s\n", err)
 		return err
 	}
 
 	var q = t.sdb.Insert(t.table).
 		Columns("date", "rate", "coin", "fiat").
 		Values(
-			rate.Date,
+			rate.Date.Format(btclists.DateTimeFormat),
 			rating,
 			rate.Coin,
 			rate.Fiat,
-		)
+		).Suffix(`
+			ON CONFLICT (date) DO NOTHING
+		`)
 	if _, err := q.ExecContext(ctx); err != nil {
-		log.Printf("[ERROR] | [DB] | Failed insert record into db.Value | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed insert record into db.Value | %s\n", err)
 		return err
 	}
 	return nil
@@ -120,14 +122,14 @@ func (t *PostgresDB) Latest(ctx context.Context, coin string, fiat string) (btcl
 
 	var row = q.QueryRowContext(ctx)
 
-	var ts pgtype.Timestamptz
+	var ts pgtype.Timestamp
 	var rate btclists.Rate
 	if err := row.Scan(&rate.Id, &ts, &rate.Rate, &rate.Coin, &rate.Fiat); err != nil {
-		log.Printf("[ERROR] | [DB] | Failed to marshal row | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed to marshal row | %s\n", err)
 		return rate, err
 	}
 
-	rate.Date = ts.Time
+	rate.Date = ts.Time.UTC()
 
 	return rate, nil
 }
@@ -144,14 +146,15 @@ func (t *PostgresDB) Oldest(ctx context.Context, coin string, fiat string) (btcl
 		Limit(1)
 
 	var row = q.QueryRowContext(ctx)
-	var ts pgtype.Timestamptz
 	var rate btclists.Rate
+
+	var ts pgtype.Timestamp
 	if err := row.Scan(&rate.Id, &ts, &rate.Rate, &rate.Coin, &rate.Fiat); err != nil {
-		log.Printf("[ERROR] | [DB] | Failed to marshal row | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed to marshal row | %s\n", err)
 		return rate, err
 	}
 
-	rate.Date = ts.Time
+	rate.Date = ts.Time.UTC()
 
 	return rate, nil
 }
@@ -167,9 +170,9 @@ func (t *PostgresDB) At(ctx context.Context, coin string, fiat string, tm time.T
 			"t.fiat": fiat,
 		}).
 		Where(
-			"t.date BETWEEN $3 AND $4",
-			tm,
-			tm.Add(acceptableRange), // scale this over 1 minutes, so we should be able to get exact or closest.
+			"t.date BETWEEN $3::timestamp AND $4::timestamp",
+			tm.Format(btclists.DateTimeFormat),
+			tm.Add(acceptableRange).Format(btclists.DateTimeFormat), // scale this over 1 minutes, so we should be able to get exact or closest.
 		).
 		OrderBy("t.date ASC").
 		Limit(1)
@@ -178,9 +181,9 @@ func (t *PostgresDB) At(ctx context.Context, coin string, fiat string, tm time.T
 
 	var rate btclists.Rate
 
-	var ts pgtype.Timestamptz
+	var ts pgtype.Timestamp
 	if err := row.Scan(&rate.Id, &ts, &rate.Rate, &rate.Coin, &rate.Fiat); err != nil {
-		log.Printf("[ERROR] | [DB] | Failed to marshal row | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed to marshal row | %s\n", err)
 		return rate, err
 	}
 
@@ -197,15 +200,15 @@ func (t *PostgresDB) Range(ctx context.Context, coin string, fiat string, from t
 			"t.fiat": fiat,
 		}).
 		Where(
-			"t.date BETWEEN $3 AND $4",
-			from,
-			to,
+			"t.date BETWEEN $3::timestamp AND $4::timestamp",
+			from.Format(btclists.DateTimeFormat),
+			to.Format(btclists.DateTimeFormat),
 		).
 		OrderBy("date DESC")
 
 	var rows, err = q.QueryContext(ctx)
 	if err != nil {
-		log.Printf("[ERROR] | [DB] | Failed query request | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed query request | %s\n", err)
 		return nil, err
 	}
 
@@ -213,13 +216,13 @@ func (t *PostgresDB) Range(ctx context.Context, coin string, fiat string, from t
 	for rows.Next() {
 		var rate btclists.Rate
 
-		var ts pgtype.Timestamptz
+		var ts pgtype.Timestamp
 		if err := rows.Scan(&rate.Id, &ts, &rate.Rate, &rate.Coin, &rate.Fiat); err != nil {
-			log.Printf("[ERROR] | [DB] | Failed scan row into struct | %s\n", err)
+			log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed scan row into struct | %s\n", err)
 			return nil, err
 		}
 
-		rate.Date = ts.Time
+		rate.Date = ts.Time.UTC()
 		rates = append(rates, rate)
 	}
 
@@ -235,16 +238,16 @@ func (t *PostgresDB) AverageForRange(ctx context.Context, coin string, fiat stri
 			"fiat": fiat,
 		}).
 		Where(
-			"date between $3 and $4",
-			from,
-			to,
+			"date between $3::timestamp and $4::timestamp",
+			from.Format(btclists.DateTimeFormat),
+			to.Format(btclists.DateTimeFormat),
 		)
 
 	var avg decimal.Decimal
 
 	var row = q.QueryRowContext(ctx)
 	if err := row.Scan(&avg); err != nil {
-		log.Printf("[ERROR] | [DB] | Failed to marshal row | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed to marshal row | %s\n", err)
 		return avg, err
 	}
 
@@ -260,16 +263,16 @@ func (t *PostgresDB) CountForRange(ctx context.Context, coin string, fiat string
 			"fiat": fiat,
 		}).
 		Where(
-			"date between $3 and $4",
-			from,
-			to,
+			"date between $3::timestamp and $4::timestamp",
+			from.Format(btclists.DateTimeFormat),
+			to.Format(btclists.DateTimeFormat),
 		)
 
 	var total int
 
 	var row = q.QueryRowContext(ctx)
 	if err := row.Scan(&total); err != nil {
-		log.Printf("[ERROR] | [DB] | Failed to marshal row | %s\n", err)
+		log.Printf("[BTC Listings] | [ERROR] | [DB] | Failed to marshal row | %s\n", err)
 		return total, err
 	}
 

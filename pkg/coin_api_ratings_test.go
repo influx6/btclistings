@@ -1,11 +1,8 @@
 package pkg_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
 	"testing"
 	"time"
 
@@ -89,23 +86,6 @@ func (c *MockCoinMarket) Range(ctx context.Context, coin string, fiat string, fr
 	return c.RangeFunc(ctx, coin, fiat, from, to, limit)
 }
 
-func createResponse(statusCode int) (*http.Response, error) {
-	var data, err = json.Marshal(pkg.ExchangeRate{
-		Time:         someTime,
-		AssetIdBase:  COIN,
-		AssetIdQuote: FIAT,
-		Rate:         decimal.NewFromFloat(10.343),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &http.Response{
-		StatusCode: statusCode,
-		Body:       &ClosingBuffer{bytes.NewBuffer(data)},
-	}, nil
-}
-
 func TestNewCoinRatingService_Latest_ToAPI(t *testing.T) {
 	var db = new(MockRateDB)
 	var market = new(MockCoinMarket)
@@ -116,8 +96,7 @@ func TestNewCoinRatingService_Latest_ToAPI(t *testing.T) {
 		return someRate, nil
 	}
 
-	var ctx, canceler = context.WithCancel(context.Background())
-	var service = pkg.NewCoinRatingService(ctx, db, market, COIN, FIAT)
+	var service = pkg.NewCoinRatingService(context.Background(), db, market)
 
 	db.On("Add", someRate).Return(nil)
 	db.On("Latest", COIN, FIAT).Return(btclists.Rate{}, errors.New("not in db"))
@@ -128,9 +107,6 @@ func TestNewCoinRatingService_Latest_ToAPI(t *testing.T) {
 
 	require.True(t, calledAPI)
 	db.AssertExpectations(t)
-
-	canceler()
-	service.Wait()
 }
 
 func TestNewCoinRatingService_Latest_ToDB(t *testing.T) {
@@ -143,8 +119,7 @@ func TestNewCoinRatingService_Latest_ToDB(t *testing.T) {
 		return someRate, nil
 	}
 
-	var ctx, canceler = context.WithCancel(context.Background())
-	var service = pkg.NewCoinRatingService(ctx, db, market, COIN, FIAT)
+	var service = pkg.NewCoinRatingService(context.Background(), db, market)
 
 	db.On("Latest", COIN, FIAT).Return(someRate, nil)
 
@@ -154,34 +129,4 @@ func TestNewCoinRatingService_Latest_ToDB(t *testing.T) {
 
 	require.False(t, calledAPI)
 	db.AssertExpectations(t)
-
-	canceler()
-	service.Wait()
-}
-
-func TestNewCoinRatingService_Range_ToDB(t *testing.T) {
-	var db = new(MockRateDB)
-	var market = new(MockCoinMarket)
-
-	var calledAPI = false
-	market.RangeFunc = func(ctx context.Context, coin string, fiat string, from, to time.Time, limit int) ([]btclists.Rate, error) {
-		calledAPI = true
-		return []btclists.Rate{someRate}, nil
-	}
-
-	var ctx, canceler = context.WithCancel(context.Background())
-	var service = pkg.NewCoinRatingService(ctx, db, market, COIN, FIAT)
-
-	db.On("CountForRange", COIN, FIAT, someTime, someTimeLater).Return(1, nil)
-	db.On("Range", COIN, FIAT, someTime, someTimeLater, 5000).Return(someRate, nil)
-
-	var result, resErr = service.Range(context.Background(), COIN, FIAT, someTime, someTimeLater)
-	require.NoError(t, resErr)
-	require.Equal(t, someRate, result)
-
-	require.False(t, calledAPI)
-	db.AssertExpectations(t)
-
-	canceler()
-	service.Wait()
 }
