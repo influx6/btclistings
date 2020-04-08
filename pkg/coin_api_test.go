@@ -47,7 +47,7 @@ func TestCoinAPI_Range_ValidateURLWithoutToTime(t *testing.T) {
 		return nil, errors.New("not concerned")
 	}
 
-	_, _ = coinLayer.Range(context.Background(), COIN, FIAT, someTime, time.Time{}, pkg.PeriodInterval, 1)
+	_, _ = coinLayer.Range(context.Background(), COIN, FIAT, someTime, time.Time{}, 1)
 }
 
 func TestCoinAPI_Range_ValidateURLWithToTime(t *testing.T) {
@@ -75,7 +75,7 @@ func TestCoinAPI_Range_ValidateURLWithToTime(t *testing.T) {
 		return nil, errors.New("not concerned")
 	}
 
-	_, _ = coinLayer.Range(context.Background(), COIN, FIAT, someTime, someTimeLater, pkg.PeriodInterval, 1)
+	_, _ = coinLayer.Range(context.Background(), COIN, FIAT, someTime, someTimeLater, 1)
 }
 
 func TestCoinAPI_Rate_ValidateURLWithoutTime(t *testing.T) {

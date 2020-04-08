@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/influx6/btclists/pkg"
 
 	"github.com/stretchr/testify/require"
@@ -18,12 +20,22 @@ import (
 )
 
 var _ btclists.RateService = (*RateServerMock)(nil)
+var _ btclists.RatingsAverageService = (*RateServerMock)(nil)
 
 // RateServerMock implements btclists.RateServer.
 type RateServerMock struct {
-	LatestFunc func(ctx context.Context, COIN string, FIAT string) (btclists.Rate, error)
-	AtFunc     func(ctx context.Context, COIN string, FIAT string, at time.Time) (btclists.Rate, error)
-	RangeFunc  func(ctx context.Context, COIN string, FIAT string, from, to time.Time) ([]btclists.Rate, error)
+	LatestFunc          func(ctx context.Context, COIN string, FIAT string) (btclists.Rate, error)
+	AtFunc              func(ctx context.Context, COIN string, FIAT string, at time.Time) (btclists.Rate, error)
+	RangeFunc           func(ctx context.Context, COIN string, FIAT string, from, to time.Time) ([]btclists.Rate, error)
+	AverageForRangeFunc func(ctx context.Context, COIN string, FIAT string, from, to time.Time) (decimal.Decimal, error)
+}
+
+// AverageRangeFor implements btclists.RatingsAverageService interface.
+//
+// We test the functions using this implementation and not this
+// implementation.
+func (rs RateServerMock) AverageForRange(ctx context.Context, COIN string, FIAT string, from, to time.Time) (decimal.Decimal, error) {
+	return rs.AverageForRangeFunc(ctx, COIN, FIAT, from, to)
 }
 
 // Range implements btclists.RateServer interface.
@@ -210,8 +222,8 @@ func TestAtHandlerValidation(t *testing.T) {
 
 func TestAverageHandlerValidation(t *testing.T) {
 	var rates = new(RateServerMock)
-	rates.RangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (rates []btclists.Rate, err error) {
-		return []btclists.Rate{someRate}, nil
+	rates.AverageForRangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (decimal.Decimal, error) {
+		return decimal.NewFromFloat(34.32), nil
 	}
 
 	var httpFunc = pkg.GetAverageFor(rates, FIAT, COIN)

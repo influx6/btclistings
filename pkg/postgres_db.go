@@ -19,43 +19,43 @@ import (
 )
 
 const (
-	acceptableRange = 1 * time.Minute
+	acceptableRange = 5 * time.Minute
 )
 
-type TimeScaleDB struct {
+type PostgresDB struct {
 	db    *sql.DB
 	table string
 	sdb   squirrel.StatementBuilderType
 }
 
-func NewTimeScaleDB(db *sql.DB, table string) (*TimeScaleDB, error) {
+func NewPostgresDB(db *sql.DB, table string) (*PostgresDB, error) {
 	var sqdb = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar).RunWith(db)
-	var tdb TimeScaleDB
+	var tdb PostgresDB
 	tdb.db = db
 	tdb.sdb = sqdb
 	tdb.table = table
 	return &tdb, nil
 }
 
-func NewTimeScaleDBFromURL(dbURL string, table string) (*TimeScaleDB, error) {
+func NewPostgresDBFromURL(dbURL string, table string) (*PostgresDB, error) {
 	var c, err = pgx.ParseConfig(dbURL)
 	if err != nil {
 		return nil, err
 	}
 
 	var db = stdlib.OpenDB(*c)
-	return NewTimeScaleDB(db, table)
+	return NewPostgresDB(db, table)
 }
 
-func (t *TimeScaleDB) DB() *sql.DB {
+func (t *PostgresDB) DB() *sql.DB {
 	return t.db
 }
 
-func (t *TimeScaleDB) Close() error {
+func (t *PostgresDB) Close() error {
 	return t.db.Close()
 }
 
-func (t *TimeScaleDB) Add(ctx context.Context, rate btclists.Rate) error {
+func (t *PostgresDB) Add(ctx context.Context, rate btclists.Rate) error {
 	var rating, err = rate.Rate.Value()
 	if err != nil {
 		log.Printf("[ERROR] | [DB] | Failed transform decimal rating to db.Value | %s\n", err)
@@ -77,7 +77,7 @@ func (t *TimeScaleDB) Add(ctx context.Context, rate btclists.Rate) error {
 	return nil
 }
 
-func (t *TimeScaleDB) AddBatch(ctx context.Context, rates []btclists.Rate) error {
+func (t *PostgresDB) AddBatch(ctx context.Context, rates []btclists.Rate) error {
 	if len(rates) == 0 {
 		return nil
 	}
@@ -107,7 +107,7 @@ func (t *TimeScaleDB) AddBatch(ctx context.Context, rates []btclists.Rate) error
 	return nil
 }
 
-func (t *TimeScaleDB) Latest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
+func (t *PostgresDB) Latest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
 	var q = t.sdb.
 		Select("id", "date", "rate", "coin", "fiat").
 		From(t.table).
@@ -132,7 +132,7 @@ func (t *TimeScaleDB) Latest(ctx context.Context, coin string, fiat string) (btc
 	return rate, nil
 }
 
-func (t *TimeScaleDB) Oldest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
+func (t *PostgresDB) Oldest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
 	var q = t.sdb.
 		Select("id", "date", "rate", "coin", "fiat").
 		From(t.table).
@@ -158,7 +158,7 @@ func (t *TimeScaleDB) Oldest(ctx context.Context, coin string, fiat string) (btc
 
 // At tries to retrieve ratings at giving timestamp but if such rating for exactly the giving
 // time is not available, then the next rating within a 1 min range would be returned.
-func (t *TimeScaleDB) At(ctx context.Context, coin string, fiat string, tm time.Time) (btclists.Rate, error) {
+func (t *PostgresDB) At(ctx context.Context, coin string, fiat string, tm time.Time) (btclists.Rate, error) {
 	var q = t.sdb.
 		Select("t.id", "t.date", "t.rate", "t.coin", "t.fiat").
 		From(fmt.Sprintf("%s t", t.table)).
@@ -188,7 +188,7 @@ func (t *TimeScaleDB) At(ctx context.Context, coin string, fiat string, tm time.
 	return rate, nil
 }
 
-func (t *TimeScaleDB) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) ([]btclists.Rate, error) {
+func (t *PostgresDB) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) ([]btclists.Rate, error) {
 	var q = t.sdb.
 		Select("t.id", "t.date", "t.rate", "t.coin", "t.fiat").
 		From(fmt.Sprintf("%s t", t.table)).
@@ -226,7 +226,7 @@ func (t *TimeScaleDB) Range(ctx context.Context, coin string, fiat string, from 
 	return rates, nil
 }
 
-func (t *TimeScaleDB) AverageForRange(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) (decimal.Decimal, error) {
+func (t *PostgresDB) AverageForRange(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) (decimal.Decimal, error) {
 	var q = t.sdb.
 		Select("AVG(rate)").
 		From(t.table).
@@ -249,4 +249,29 @@ func (t *TimeScaleDB) AverageForRange(ctx context.Context, coin string, fiat str
 	}
 
 	return avg, nil
+}
+
+func (t *PostgresDB) CountForRange(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) (int, error) {
+	var q = t.sdb.
+		Select("Count(*)").
+		From(t.table).
+		Where(squirrel.Eq{
+			"coin": coin,
+			"fiat": fiat,
+		}).
+		Where(
+			"date between $3 and $4",
+			from,
+			to,
+		)
+
+	var total int
+
+	var row = q.QueryRowContext(ctx)
+	if err := row.Scan(&total); err != nil {
+		log.Printf("[ERROR] | [DB] | Failed to marshal row | %s\n", err)
+		return total, err
+	}
+
+	return total, nil
 }

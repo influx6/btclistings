@@ -7,28 +7,43 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/influx6/btclists"
 )
 
 var (
-	zeroTime   = time.Time{}
-	ErrDBError = errors.New("db error occurred")
+	zeroTime                 = time.Time{}
+	ErrDBError               = errors.New("db error occurred")
+	_          CoinMarketAPI = (*CoinAPI)(nil)
 )
 
-// CoinAPIRatingService implements the btclists.RateService, and periodically
+// CoinMarketAPI exposes the minimal contract desirable for an exchange service api.
+//
+// NOTE: Partial need existed because I wanted this user of the API (i.e CoinRatingService) tested on
+// specific behaviour. If such tests are not really necessary, then using an interface
+// is not necessary and too much may lead to interface poisoning.
+//
+type CoinMarketAPI interface {
+	Rate(ctx context.Context, coin string, fiat string, at time.Time) (btclists.Rate, error)
+	RangeFrom(ctx context.Context, coin string, fiat string, from time.Time, limit int) ([]btclists.Rate, error)
+	Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time, limit int) ([]btclists.Rate, error)
+}
+
+// CoinRatingService implements the btclists.RateService, and periodically
 // pulls latest exchange rate from db per minute.
-type CoinAPIRatingService struct {
+type CoinRatingService struct {
 	fiat     string
 	coin     string
-	exchange *CoinAPI
-	tdb      btclists.RateDB
+	exchange CoinMarketAPI
+	tdb      btclists.RatesDB
 	ctx      context.Context
 	workers  sync.WaitGroup
 }
 
-func NewCoinAPIRatingService(ctx context.Context, db btclists.RateDB, exchange *CoinAPI, coin string, fiat string) *CoinAPIRatingService {
+func NewCoinRatingService(ctx context.Context, db btclists.RatesDB, exchange CoinMarketAPI, coin string, fiat string) *CoinRatingService {
 	var waiter sync.WaitGroup
-	txp := &CoinAPIRatingService{
+	txp := &CoinRatingService{
 		fiat:     fiat,
 		coin:     coin,
 		ctx:      ctx,
@@ -43,12 +58,12 @@ func NewCoinAPIRatingService(ctx context.Context, db btclists.RateDB, exchange *
 	return txp
 }
 
-func (t *CoinAPIRatingService) Wait() {
+func (t *CoinRatingService) Wait() {
 	t.workers.Wait()
 }
 
 // Latest implements RateService.Latest method, fulfilling RateService contract.
-func (t *CoinAPIRatingService) Latest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
+func (t *CoinRatingService) Latest(ctx context.Context, coin string, fiat string) (btclists.Rate, error) {
 	var latest, err = t.tdb.Latest(ctx, coin, fiat)
 
 	// if db has no latest ratings data, then fallback quickly to API
@@ -71,7 +86,7 @@ func (t *CoinAPIRatingService) Latest(ctx context.Context, coin string, fiat str
 //
 // Function may return retrieved result with error if db insertion failed.
 // Handle as you wish.
-func (t *CoinAPIRatingService) At(ctx context.Context, coin string, fiat string, ts time.Time) (btclists.Rate, error) {
+func (t *CoinRatingService) At(ctx context.Context, coin string, fiat string, ts time.Time) (btclists.Rate, error) {
 	var ratingForTime, err = t.tdb.At(ctx, coin, fiat, ts)
 	if err == nil {
 		return ratingForTime, nil
@@ -105,52 +120,86 @@ func (t *CoinAPIRatingService) At(ctx context.Context, coin string, fiat string,
 	return ratingFromAPI, nil
 }
 
+/* Average implements RatingsAverageServe interface.
+*
+* If we can't find suitable records in db, then API will be used, else we pull
+* available records in DB, even if a bit lagging behind latest from API.
+*
+* Note: Average will be returned if it was pulled from the API even if an error occurred
+* whilst saving retrieved ratings into DB. Caller should decide on how to proceed.
+*
+ */
+func (t *CoinRatingService) Average(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) (decimal.Decimal, error) {
+	var average decimal.Decimal
+
+	// Do we have have any records for this range ?
+	var total, terr = t.tdb.CountForRange(ctx, coin, fiat, from, to)
+	if terr != nil {
+		// fail fast. It could be many things, but we won't mitigate
+		// these here, let call fail and force new call by caller.
+		return average, terr
+	}
+
+	// Pull from API and calculate average
+	if total == 0 {
+		var results, apiErr = t.exchange.Range(ctx, coin, fiat, from, to, MaxLimit)
+		if apiErr != nil {
+			log.Printf("[ERROR] | API fails us | %s\n", apiErr)
+			return average, apiErr
+		}
+
+		for _, result := range results {
+			average = average.Add(result.Rate)
+		}
+
+		average = average.Div(decimal.NewFromInt(int64(len(results))))
+
+		var dbSaveErr error
+		if dbSaveErr = t.tdb.AddBatch(ctx, results); dbSaveErr != nil {
+			log.Printf("[CRITICAL] | DB failures are not good | %s\n", dbSaveErr)
+		}
+
+		return average, dbSaveErr
+	}
+
+	var err error
+	average, err = t.tdb.AverageForRange(ctx, coin, fiat, from, to)
+	if err != nil {
+		log.Printf("[ERROR] | Failed to retreive average | %s\n", err)
+	}
+	return average, err
+}
+
 /* Range implements RateService.Range method, fulfilling RateService contract.
 *
 *  We are enforcing certain rules to govern how range should work:
 *
-*  1. If `from` timestamp is in the future of current latest date (say 1 hour ahead),
-*	then consider this a future timestamp and just return an empty list
+*  1. If time range is not in db, this will occur if time range is too far back
+*	or in the future, if so then we pull from API and store new info, serving
+*	API results.
 *
-*  2. If `from` is below last available record date known in db, then this is beyond
-* 	what we currently have, so shoot directly to API for now (we may later add restrictions to this)
-*   to see if its something we can get historically.
-*
-*  3. If `from` within existing record range, even if value may not necessary be accurate
-*	to the last minute, we can provide some level of confidence on the available range we
-* 	historically have in db.
+*  2. If time range is in db, even if not totally accurate to existing records in API
+*	we will serve those and allow our service to catch up.
 *
 * Note: Results may be returned if it was pulled from the API and the returned error was
-* possibly a DB failure. Caller should decide on how to proceed.
+* possibly a DB insert failure. Caller should decide on how to proceed.
 *
 * */
-func (t *CoinAPIRatingService) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) ([]btclists.Rate, error) {
+func (t *CoinRatingService) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time) ([]btclists.Rate, error) {
 	var results []btclists.Rate
 
-	var latest, lastErr = t.tdb.Latest(ctx, coin, fiat)
-	if lastErr != nil {
-		// fail fast. I could be many things, but we won't mitigate
+	var total, terr = t.tdb.CountForRange(ctx, coin, fiat, from, to)
+	if terr != nil {
+		// fail fast. It could be many things, but we won't mitigate
 		// these here, let call fail and force new call by caller.
-		return results, lastErr
+		return results, terr
 	}
 
-	// this is in the future
-	if from.After(latest.Date) {
-		return results, nil
-	}
-
-	var oldest, oldErr = t.tdb.Oldest(ctx, coin, fiat)
-	if oldErr != nil {
-		// fail fast. I could be many things, but we won't mitigate
-		// these here, let call fail and force new call by caller.
-		return results, oldErr
-	}
-
-	// if we are outside oldest, then pull directly from API
-	// and serve that as results after saving batch.
-	if from.Before(oldest.Date) {
+	// if we have no records for said time range, then pull directly from API
+	// and serve that as results after saving.
+	if total == 0 {
 		var apiErr error
-		results, apiErr = t.exchange.Range(ctx, coin, fiat, from, to, PeriodInterval, MaxLimit)
+		results, apiErr = t.exchange.Range(ctx, coin, fiat, from, to, MaxLimit)
 		if apiErr != nil {
 			log.Printf("[ERROR] | API fails us | %s\n", apiErr)
 			return results, apiErr
@@ -175,7 +224,7 @@ func (t *CoinAPIRatingService) Range(ctx context.Context, coin string, fiat stri
 // getAndUpdateWithLatest fetches current coin-fiat rating from API, it
 // may return fetched ratings with error if db, fails to insert ratings
 // successfully.
-func (t *CoinAPIRatingService) getAndUpdateWithLatest(ctx context.Context) (btclists.Rate, error) {
+func (t *CoinRatingService) getAndUpdateWithLatest(ctx context.Context) (btclists.Rate, error) {
 	// retrieve latest ratings pair for current time.
 	var latestRating, err = t.exchange.Rate(ctx, t.coin, t.fiat, zeroTime)
 	if err != nil {
@@ -191,17 +240,13 @@ func (t *CoinAPIRatingService) getAndUpdateWithLatest(ctx context.Context) (btcl
 	return latestRating, err
 }
 
-func (t *CoinAPIRatingService) manageLatestWorker() {
+func (t *CoinRatingService) manageLatestWorker() {
 	t.workers.Add(1)
 	go func() {
 		defer t.workers.Done()
 
 		var ticker = time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
-
-		if _, err := t.getAndUpdateWithLatest(t.ctx); err != nil {
-			log.Printf("[CRITICAL] | Failed initial latest request | %s\n", err)
-		}
 
 		for {
 			select {

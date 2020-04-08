@@ -131,20 +131,20 @@ func (c *CoinAPI) Rate(ctx context.Context, coin string, fiat string, time time.
 }
 
 // RangeFrom returns all results from giving time till provided limit.
-func (c *CoinAPI) RangeFrom(ctx context.Context, coin string, fiat string, from time.Time, period string, limit int) ([]btclists.Rate, error) {
-	return c.Range(ctx, coin, fiat, from, time.Time{}, period, limit)
+func (c *CoinAPI) RangeFrom(ctx context.Context, coin string, fiat string, from time.Time, limit int) ([]btclists.Rate, error) {
+	return c.Range(ctx, coin, fiat, from, time.Time{}, limit)
 }
 
 // Range retrieves all rates for giving coin for giving fiat and crypto-coin pair from provided
 // time range (if to is not provided, then till limit requested). Note CoinAPI has a 100,000 record
 // limit.
-func (c *CoinAPI) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time, period string, limit int) ([]btclists.Rate, error) {
+func (c *CoinAPI) Range(ctx context.Context, coin string, fiat string, from time.Time, to time.Time, limit int) ([]btclists.Rate, error) {
 	if from.IsZero() {
 		return nil, errors.New("invalid 'from' time range provided")
 	}
 
 	var query = url.Values{}
-	query.Set("period_id", period)
+	query.Set("period_id", PeriodInterval)
 	query.Set("include_empty_items", "false")
 	query.Set("limit", fmt.Sprintf("%d", limit))
 	query.Set("time_start", from.Format(btclists.DateTimeFormat))

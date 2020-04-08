@@ -51,12 +51,25 @@ type RateService interface {
 	Range(ctx context.Context, crypto string, currency string, start time.Time, end time.Time) ([]Rate, error)
 }
 
-// RateDB defines expectation for minimum support required
-// a db store for storing and retrieving Rates.
-type RateDB interface {
-	RateService
+type RatingsAverageService interface {
+	AverageForRange(ctx context.Context, crypto string, currency string, start time.Time, end time.Time) (decimal.Decimal, error)
+}
 
+// RatesDB defines expectation for minimum support required
+// a db store for storing and retrieving Rates.
+type RatesDB interface {
+	RateService
+	RatingsAverageService
+
+	// Add adds giving rate into db
 	Add(ctx context.Context, rate Rate) error
+
+	// AddBatch adds provided batch into db.
 	AddBatch(ctx context.Context, rate []Rate) error
+
+	// Oldest returns oldest rate since time began.
 	Oldest(ctx context.Context, coin string, fiat string) (Rate, error)
+
+	// CountFor returns count for records between provided time ranges
+	CountForRange(ctx context.Context, crypto string, currency string, start time.Time, end time.Time) (int, error)
 }

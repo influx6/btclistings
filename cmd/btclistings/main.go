@@ -20,9 +20,10 @@ const (
 )
 
 var (
-	PORT            = os.Getenv("PORT")
-	HOST            = os.Getenv("HOST")
-	COINLAYER_TOKEN = os.Getenv("COINLAYER_TOKEN")
+	PORT           = os.Getenv("PORT")
+	HOST           = os.Getenv("HOST")
+	COIN_API_TOKEN = os.Getenv("COIN_API_TOKEN")
+	DATABASE_URL   = os.Getenv("DATABASE_URL")
 
 	httpClient = &http.Client{
 		Timeout: time.Second * 10,
@@ -37,6 +38,18 @@ var (
 		syscall.SIGABRT,
 	}
 )
+
+type ClientWrapper struct{}
+
+func (c ClientWrapper) Do(req *http.Request) (*http.Response, error) {
+	log.Printf("[HTTP] | [COIN API] | %s", req.URL.String())
+
+	var res, err = httpClient.Do(req)
+	if err != nil {
+		log.Printf("[HTTP] | [COIN API] | %s | %d", req.URL.String(), res.StatusCode)
+	}
+	return res, err
+}
 
 func main() {
 	var ctx, ctxCancelFunc = context.WithCancel(context.Background())

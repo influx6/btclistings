@@ -26,8 +26,8 @@ var (
 	dbURL     = os.Getenv("DATABASE_URL")
 )
 
-func TestTimeScaledDB_Add(t *testing.T) {
-	var db, err = pkg.NewTimeScaleDBFromURL(dbURL, tableName)
+func TestRatingsDB_Add(t *testing.T) {
+	var db, err = pkg.NewPostgresDBFromURL(dbURL, tableName)
 	require.NoError(t, err)
 
 	defer func() {
@@ -58,8 +58,8 @@ func TestTimeScaledDB_Add(t *testing.T) {
 	}
 }
 
-func TestTimeScaledDB_AddBatch_WithDups(t *testing.T) {
-	var db, err = pkg.NewTimeScaleDBFromURL(dbURL, tableName)
+func TestRatingsDB_AddBatch_WithDups(t *testing.T) {
+	var db, err = pkg.NewPostgresDBFromURL(dbURL, tableName)
 	require.NoError(t, err)
 
 	defer func() {
@@ -92,8 +92,8 @@ func TestTimeScaledDB_AddBatch_WithDups(t *testing.T) {
 	}
 }
 
-func TestTimeScaledDB_Latest(t *testing.T) {
-	var db, err = pkg.NewTimeScaleDBFromURL(dbURL, tableName)
+func TestRatingsDB_Latest(t *testing.T) {
+	var db, err = pkg.NewPostgresDBFromURL(dbURL, tableName)
 	require.NoError(t, err)
 	require.NoError(t, prepareTestDatabase(db.DB()))
 
@@ -111,8 +111,8 @@ func TestTimeScaledDB_Latest(t *testing.T) {
 	require.True(t, latest.Date.Equal(ts))
 }
 
-func TestTimeScaledDB_Oldest(t *testing.T) {
-	var db, err = pkg.NewTimeScaleDBFromURL(dbURL, tableName)
+func TestRatingsDB_Oldest(t *testing.T) {
+	var db, err = pkg.NewPostgresDBFromURL(dbURL, tableName)
 	require.NoError(t, err)
 	require.NoError(t, prepareTestDatabase(db.DB()))
 
@@ -130,8 +130,8 @@ func TestTimeScaledDB_Oldest(t *testing.T) {
 	require.True(t, latest.Date.Equal(ts))
 }
 
-func TestTimeScaledDB_At(t *testing.T) {
-	var db, err = pkg.NewTimeScaleDBFromURL(dbURL, tableName)
+func TestRatingsDB_At(t *testing.T) {
+	var db, err = pkg.NewPostgresDBFromURL(dbURL, tableName)
 	require.NoError(t, err)
 	require.NoError(t, prepareTestDatabase(db.DB()))
 
@@ -150,8 +150,8 @@ func TestTimeScaledDB_At(t *testing.T) {
 	require.Equal(t, ts, latestAt.Date)
 }
 
-func TestTimeScaledDB_Range(t *testing.T) {
-	var db, err = pkg.NewTimeScaleDBFromURL(dbURL, tableName)
+func TestRatingsDB_Range(t *testing.T) {
+	var db, err = pkg.NewPostgresDBFromURL(dbURL, tableName)
 	require.NoError(t, err)
 	require.NoError(t, prepareTestDatabase(db.DB()))
 
@@ -175,8 +175,8 @@ func TestTimeScaledDB_Range(t *testing.T) {
 	require.Equal(t, []btclists.Rate{fixtures[5], fixtures[4], fixtures[3]}, records)
 }
 
-func TestTimeScaledDB_Avg(t *testing.T) {
-	var db, err = pkg.NewTimeScaleDBFromURL(dbURL, tableName)
+func TestRatingsDB_AverageForRange(t *testing.T) {
+	var db, err = pkg.NewPostgresDBFromURL(dbURL, tableName)
 	require.NoError(t, err)
 	require.NoError(t, prepareTestDatabase(db.DB()))
 
@@ -202,6 +202,26 @@ func TestTimeScaledDB_Avg(t *testing.T) {
 	var avg, lastErr = db.AverageForRange(context.Background(), COIN, FIAT, from, to)
 	require.NoError(t, lastErr)
 	require.NotEmpty(t, expectedAvg, avg)
+}
+
+func TestRatingsDB_CountForRange(t *testing.T) {
+	var db, err = pkg.NewPostgresDBFromURL(dbURL, tableName)
+	require.NoError(t, err)
+	require.NoError(t, prepareTestDatabase(db.DB()))
+
+	defer func() {
+		require.NoError(t, tearDownTable(db.DB(), tableName))
+	}()
+
+	var from, ferr = time.Parse(time.RFC3339, "2020-04-07T18:02:19+08:00")
+	require.NoError(t, ferr)
+
+	var to, terr = time.Parse(time.RFC3339, "2020-04-07T18:04:19+08:00")
+	require.NoError(t, terr)
+
+	var count, lastErr = db.AverageForRange(context.Background(), COIN, FIAT, from, to)
+	require.NoError(t, lastErr)
+	require.NotEmpty(t, 3, count)
 }
 
 func prepareTestDatabase(db *sql.DB) error {

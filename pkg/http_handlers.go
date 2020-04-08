@@ -127,7 +127,7 @@ func validateTimestampString(t string) (time.Time, error) {
 // Response: { data: {price} } where 'price' is a float64 type.
 // Error Response: { error: {error text} } with status code in range 400-500.
 //
-func GetAverageFor(server btclists.RateService, fiat string, coin string) http.HandlerFunc {
+func GetAverageFor(server btclists.RatingsAverageService, fiat string, coin string) http.HandlerFunc {
 	return func(writer http.ResponseWriter, request *http.Request) {
 		var from, to, err = validateAndRetrieveStartAndEndTimestamps(request)
 		if err != nil {
@@ -136,27 +136,20 @@ func GetAverageFor(server btclists.RateService, fiat string, coin string) http.H
 			return
 		}
 
-		var results, resErr = server.Range(request.Context(), coin, fiat, from, to)
-		if resErr != nil {
-			if resErr == btclists.ErrRateNotFound {
+		var average, avgErr = server.AverageForRange(request.Context(), coin, fiat, from, to)
+		if avgErr != nil {
+			if avgErr == btclists.ErrRateNotFound {
 				writer.WriteHeader(http.StatusNotFound)
-				respondWithError(writer, err)
+				respondWithError(writer, avgErr)
 				return
 			}
 
 			writer.WriteHeader(http.StatusInternalServerError)
-			respondWithError(writer, err)
+			respondWithError(writer, avgErr)
 			return
 		}
 
-		var sum decimal.Decimal
-		for _, rate := range results {
-			sum.Add(rate.Rate)
-		}
-
-		var total = decimal.NewFromInt(int64(len(results)))
-		var averageRate = sum.Div(total)
-		respondWithRate(writer, averageRate)
+		respondWithRate(writer, average)
 	}
 }
 
