@@ -63,7 +63,27 @@ func (rs *RateServerMock) Latest(ctx context.Context, COIN string, FIAT string) 
 	return rs.LatestFunc(ctx, COIN, FIAT)
 }
 
-func TestLatestHandlerFailure(t *testing.T) {
+func TestLatestHandlerFailure_ServerIssues(t *testing.T) {
+	var rates = new(RateServerMock)
+	rates.LatestFunc = func(ctx context.Context, cn string, ft string) (rate btclists.Rate, err error) {
+		require.Equal(t, COIN, cn)
+		require.Equal(t, FIAT, ft)
+		err = errors.New("kaboom")
+		return
+	}
+
+	var httpFunc = pkg.GetLatest(rates, FIAT, COIN)
+
+	var response = httptest.NewRecorder()
+	var request = httptest.NewRequest("GET", "/latest", nil)
+
+	httpFunc(response, request)
+
+	require.NotEqual(t, 0, response.Body.Len())
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+}
+
+func TestLatestHandlerFailure_NotFound(t *testing.T) {
 	var rates = new(RateServerMock)
 	rates.LatestFunc = func(ctx context.Context, cn string, ft string) (rate btclists.Rate, err error) {
 		require.Equal(t, COIN, cn)
