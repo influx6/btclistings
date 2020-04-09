@@ -3,6 +3,7 @@ package pkg_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -111,6 +112,223 @@ func TestLatestHandlerSuccess(t *testing.T) {
 	var err = json.NewDecoder(response.Body).Decode(&rateResponse)
 	require.Nil(t, err)
 	require.Equal(t, someRate.Rate.String(), rateResponse.Data)
+}
+
+func TestAverageHandlerFailure_ServerIssues(t *testing.T) {
+	var rates = new(RateServerMock)
+	rates.AverageForRangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (decimal.Decimal, error) {
+		return decimal.Decimal{}, errors.New("kaboom")
+	}
+
+	var httpFunc = pkg.GetAverageFor(rates, rates, FIAT, COIN)
+	var response = httptest.NewRecorder()
+
+	var values = url.Values{}
+	values.Add("from", someTime.Format(btclists.DateTimeFormat))
+	values.Add("to", someTimeLater.Format(btclists.DateTimeFormat))
+
+	var request = httptest.NewRequest(
+		"GET",
+		fmt.Sprintf("/avg?%s", values.Encode()),
+		nil,
+	)
+
+	httpFunc(response, request)
+
+	require.NotEqual(t, 0, response.Body.Len())
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+}
+
+func TestAverageHandlerSuccess_SameTime(t *testing.T) {
+	var rates = new(RateServerMock)
+
+	var averageFuncCalled = false
+	rates.AverageForRangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (decimal.Decimal, error) {
+		averageFuncCalled = true
+		return decimal.Decimal{}, btclists.ErrRateNotFound
+	}
+
+	var atFuncCalled = false
+	rates.AtFunc = func(ctx context.Context, cn string, ft string, from time.Time) (btclists.Rate, error) {
+		atFuncCalled = true
+		return someRate, nil
+	}
+
+	var httpFunc = pkg.GetAverageFor(rates, rates, FIAT, COIN)
+	var response = httptest.NewRecorder()
+
+	var values = url.Values{}
+	values.Add("from", someTime.Format(btclists.DateTimeFormat))
+	values.Add("to", someTime.Format(btclists.DateTimeFormat))
+
+	var request = httptest.NewRequest(
+		"GET",
+		fmt.Sprintf("/avg?%s", values.Encode()),
+		nil,
+	)
+
+	httpFunc(response, request)
+
+	require.NotEqual(t, 0, response.Body.Len())
+	require.Equal(t, http.StatusOK, response.Code)
+
+	var rateResponse pkg.RateResponse
+	var err = json.NewDecoder(response.Body).Decode(&rateResponse)
+	require.Nil(t, err)
+	require.Equal(t, someRate.Rate.String(), rateResponse.Data)
+
+	require.True(t, atFuncCalled)
+	require.False(t, averageFuncCalled)
+}
+
+func TestAverageHandlerFailure_SameTime(t *testing.T) {
+	var rates = new(RateServerMock)
+
+	var averageFuncCalled = false
+	rates.AverageForRangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (decimal.Decimal, error) {
+		averageFuncCalled = true
+		return decimal.Decimal{}, btclists.ErrRateNotFound
+	}
+
+	var atFuncCalled = false
+	rates.AtFunc = func(ctx context.Context, cn string, ft string, from time.Time) (btclists.Rate, error) {
+		atFuncCalled = true
+		return btclists.Rate{}, btclists.ErrRateNotFound
+	}
+
+	var httpFunc = pkg.GetAverageFor(rates, rates, FIAT, COIN)
+	var response = httptest.NewRecorder()
+
+	var values = url.Values{}
+	values.Add("from", someTime.Format(btclists.DateTimeFormat))
+	values.Add("to", someTime.Format(btclists.DateTimeFormat))
+
+	var request = httptest.NewRequest(
+		"GET",
+		fmt.Sprintf("/avg?%s", values.Encode()),
+		nil,
+	)
+
+	httpFunc(response, request)
+
+	require.NotEqual(t, 0, response.Body.Len())
+	require.Equal(t, http.StatusNotFound, response.Code)
+
+	require.True(t, atFuncCalled)
+	require.False(t, averageFuncCalled)
+}
+
+func TestAverageHandlerFailure_NotFound(t *testing.T) {
+	var rates = new(RateServerMock)
+	rates.AverageForRangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (decimal.Decimal, error) {
+		require.Equal(t, COIN, cn)
+		require.Equal(t, FIAT, ft)
+
+		return decimal.Decimal{}, btclists.ErrRateNotFound
+	}
+
+	var httpFunc = pkg.GetAverageFor(rates, rates, FIAT, COIN)
+	var response = httptest.NewRecorder()
+
+	var values = url.Values{}
+	values.Add("from", someTime.Format(btclists.DateTimeFormat))
+	values.Add("to", someTimeLater.Format(btclists.DateTimeFormat))
+
+	var request = httptest.NewRequest(
+		"GET",
+		fmt.Sprintf("/avg?%s", values.Encode()),
+		nil,
+	)
+
+	httpFunc(response, request)
+
+	require.NotEqual(t, 0, response.Body.Len())
+	require.Equal(t, http.StatusNotFound, response.Code)
+}
+
+func TestAverageHandlerSuccess(t *testing.T) {
+	var rates = new(RateServerMock)
+	rates.AverageForRangeFunc = func(ctx context.Context, cn string, ft string, from time.Time, to time.Time) (decimal.Decimal, error) {
+		require.Equal(t, COIN, cn)
+		require.Equal(t, FIAT, ft)
+		require.Equal(t, someTime.Format(btclists.DateTimeFormat), from.Format(btclists.DateTimeFormat))
+		require.Equal(t, someTimeLater.Format(btclists.DateTimeFormat), to.Format(btclists.DateTimeFormat))
+
+		return decimal.NewFromFloat32(12.12), nil
+	}
+
+	var httpFunc = pkg.GetAverageFor(rates, rates, FIAT, COIN)
+	var response = httptest.NewRecorder()
+
+	var values = url.Values{}
+	values.Add("from", someTime.Format(btclists.DateTimeFormat))
+	values.Add("to", someTimeLater.Format(btclists.DateTimeFormat))
+
+	var request = httptest.NewRequest(
+		"GET",
+		fmt.Sprintf("/avg?%s", values.Encode()),
+		nil,
+	)
+
+	httpFunc(response, request)
+
+	require.NotEqual(t, 0, response.Body.Len())
+	require.Equal(t, http.StatusOK, response.Code)
+
+	var rateResponse pkg.RateResponse
+	var err = json.NewDecoder(response.Body).Decode(&rateResponse)
+	require.Nil(t, err)
+	require.Equal(t, "12.12", rateResponse.Data)
+}
+
+func TestAtHandlerFailure_ServerIssues(t *testing.T) {
+	var rates = new(RateServerMock)
+	rates.AtFunc = func(ctx context.Context, cn string, ft string, when time.Time) (btclists.Rate, error) {
+		return btclists.Rate{}, errors.New("kaboom")
+	}
+
+	var httpFunc = pkg.GetLatestAt(rates, FIAT, COIN)
+
+	var response = httptest.NewRecorder()
+
+	var values = url.Values{}
+	values.Add("t", someTime.Format(btclists.DateTimeFormat))
+
+	var request = httptest.NewRequest(
+		"GET",
+		fmt.Sprintf("/at?%s", values.Encode()),
+		nil,
+	)
+
+	httpFunc(response, request)
+
+	require.NotEqual(t, 0, response.Body.Len())
+	require.Equal(t, http.StatusInternalServerError, response.Code)
+}
+
+func TestAtHandlerFailure_NotFound(t *testing.T) {
+	var rates = new(RateServerMock)
+	rates.AtFunc = func(ctx context.Context, cn string, ft string, when time.Time) (btclists.Rate, error) {
+		return btclists.Rate{}, btclists.ErrRateNotFound
+	}
+
+	var httpFunc = pkg.GetLatestAt(rates, FIAT, COIN)
+
+	var response = httptest.NewRecorder()
+
+	var values = url.Values{}
+	values.Add("t", someTime.Format(btclists.DateTimeFormat))
+
+	var request = httptest.NewRequest(
+		"GET",
+		fmt.Sprintf("/at?%s", values.Encode()),
+		nil,
+	)
+
+	httpFunc(response, request)
+
+	require.NotEqual(t, 0, response.Body.Len())
+	require.Equal(t, http.StatusNotFound, response.Code)
 }
 
 func TestAtHandlerSuccess(t *testing.T) {
